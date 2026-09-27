@@ -74,7 +74,7 @@ class QuestFormatTest {
         QuestDoc.Flow wolf = doc.find("quest_wolf").flow();
         assertEquals(new QuestDoc.Flow("npc_guard", "npc_smith", List.of("quest_sword"),
                 new QuestDoc.Lines(DialogueLines.text("늑대 3마리만 잡아주게.", "요즘 가축이 자꾸 사라지거든."), List.of(),
-                        List.of(), DialogueLines.text("대단하군!"))),
+                        List.of(), List.of(), DialogueLines.text("대단하군!"))),
                 wolf);
         assertEquals("npc_smith", wolf.handInTo());
         assertEquals("npc_smith", doc.find("quest_sword").flow().handInTo());
@@ -127,6 +127,19 @@ class QuestFormatTest {
                   { "id": "quest_b", "title": "B", "requires": [ "quest_a" ], "goals": [], "rewards": [] },
                   { "id": "quest_a", "title": "A", "goals": [], "rewards": [] } ] }
                 """);
+    }
+
+    @Test
+    void linesForRightAfterDecliningRoundTrip() {
+        QuestDoc doc = QuestFormat.read("""
+                { "format": 1, "quests": [ { "id": "quest_necklace", "title": "목걸이 찾기", "giver": "npc_guard",
+                  "lines": { "offer": [ "조각이라도 찾아 주겠나?" ], "declined": [ "그래… 무리한 부탁이지." ] },
+                  "goals": [], "rewards": [] } ] }
+                """);
+        assertEquals(DialogueLines.text("그래… 무리한 부탁이지."), doc.find("quest_necklace").flow().lines().declined());
+        String written = QuestFormat.write(doc);
+        assertTrue(written.contains("\"declined\""), written);
+        assertEquals(doc, QuestFormat.read(written));
     }
 
     @Test

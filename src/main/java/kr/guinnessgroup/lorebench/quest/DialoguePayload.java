@@ -26,10 +26,10 @@ import java.util.Map;
  *
  * @param npcEntity the network id of the NPC entity the player clicked, which plays the
  *                  lines' animations on this player's screen only
- * @param resume sent after the player accepted or handed something in: carry on with
+ * @param resume sent after the player accepted, declined or handed something in: carry on with
  *               the list instead of starting over
  * @param said   with {@code resume}: what the NPC says first (a quest's lines for right after
- *               accepting it), or empty
+ *               accepting or declining it), or empty
  */
 public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.Line> greeting, List<Entry> entries,
                               boolean resume, List<DialogueLines.Line> said)
@@ -49,7 +49,7 @@ public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.
 
     /** Registers both dialogue messages. Handled on the main thread (the registrar's default). */
     public static void register(RegisterPayloadHandlersEvent event) {
-        event.registrar("4")
+        event.registrar("5")
                 .playToClient(TYPE, CODEC, (payload, context) -> ClientDialogue.accept(payload))
                 .playToServer(DialogueChoicePayload.TYPE, DialogueChoicePayload.CODEC, (choice, context) -> {
                     Dialogues dialogues = Dialogues.current();

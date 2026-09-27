@@ -54,7 +54,7 @@ import java.util.function.Function;
  *   <li>{@code GET /api/held-item?player=Name} — what they hold, as {@code /give} writes it</li>
  *   <li>{@code GET /api/crops} — the crops a harvest goal may name</li>
  *   <li>{@code GET /api/animals} — the animals a breed goal may name</li>
- *   <li>{@code GET /api/quest-players?quest=<id>} — who is on that quest or has done it</li>
+ *   <li>{@code GET /api/quest-players?quest=<id>} — who is on that quest, has done it or turned it down</li>
  *   <li>{@code POST /api/quest-reset} — take one player back to before a quest: {@code {"quest": ..., "player": <uuid>}}</li>
  * </ul>
  */
@@ -201,6 +201,7 @@ public final class LorebenchWebServer {
             JsonObject progress = new JsonObject();
             s.progress().forEach(progress::addProperty);
             p.add("progress", progress);
+            p.addProperty("timesDeclined", s.timesDeclined());
             list.add(p);
         }
         JsonObject o = new JsonObject();

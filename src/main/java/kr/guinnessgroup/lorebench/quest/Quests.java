@@ -46,8 +46,10 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -199,6 +201,23 @@ public final class Quests {
         sync(player);
     }
 
+    /** How many times the player has turned this quest down (0012). */
+    public int timesDeclined(ServerPlayer player, String questId) {
+        return QuestDeclines.read(records.get(Owner.player(player.getUUID()), QuestDeclines.key(questId)));
+    }
+
+    /**
+     * The player turned the quest down once more.
+     *
+     * @return how many times they have now, this time included
+     */
+    public int decline(ServerPlayer player, String questId) {
+        Owner owner = Owner.player(player.getUUID());
+        int times = timesDeclined(player, questId) + 1;
+        records.set(owner, QuestDeclines.key(questId), QuestDeclines.write(times));
+        return times;
+    }
+
     /**
      * Hand in a ready quest: take the goal items, give the rewards, and record it
      * done (dropping its progress), all at once on the server thread. Rewards
@@ -269,15 +288,20 @@ public final class Quests {
     /**
      * A player's standing on a quest, for the editor.
      *
-     * @param state    active, ready (online players only; it depends on their inventory) or done
+     * @param state    hidden (only turned it down so far), active, ready (online players only; it
+     *                 depends on their inventory) or done
      * @param progress their counted progress ({@link QuestDoc.Goal#progressKey()})
+     * @param timesDeclined how many times they turned it down
      */
-    public record Standing(UUID player, String name, boolean online, QuestState state, Map<String, Integer> progress) {}
+    public record Standing(UUID player, String name, boolean online, QuestState state, Map<String, Integer> progress,
+                           int timesDeclined) {}
 
-    /** Everyone who is on this quest or has done it, online or not, by name. Server thread. */
+    /** Everyone who is on this quest, has done it or has turned it down, online or not, by name. Server thread. */
     public List<Standing> standings(MinecraftServer server, String questId) {
         List<Standing> out = new ArrayList<>();
-        for (Owner owner : records.ownersWith(Owner.Kind.PLAYER, questId)) {
+        Set<Owner> owners = new LinkedHashSet<>(records.ownersWith(Owner.Kind.PLAYER, questId));
+        owners.addAll(records.ownersWith(Owner.Kind.PLAYER, QuestDeclines.key(questId)));
+        for (Owner owner : owners) {
             UUID uuid;
             try {
                 uuid = UUID.fromString(owner.id());
@@ -287,7 +311,8 @@ public final class Quests {
             ServerPlayer online = server.getPlayerList().getPlayer(uuid);
             QuestState state = online != null ? state(online, questId) : QuestState.fromRecord(records.peek(owner, questId));
             Map<String, Integer> progress = QuestProgress.read(records.peek(owner, QuestProgress.key(questId)));
-            out.add(new Standing(uuid, name(server, uuid, online), online != null, state, progress));
+            int declined = QuestDeclines.read(records.peek(owner, QuestDeclines.key(questId)));
+            out.add(new Standing(uuid, name(server, uuid, online), online != null, state, progress, declined));
         }
         out.sort(Comparator.comparing(Standing::name, String.CASE_INSENSITIVE_ORDER));
         return out;
@@ -303,14 +328,16 @@ public final class Quests {
     }
 
     /**
-     * Take a player back to before a quest, online or not: no state and no progress, so
-     * it is offered again and its supplies are given again on accepting. What they were
-     * already given (supplies, rewards) stays theirs. Other quests are left alone.
+     * Take a player back to before a quest, online or not: no state, no progress and no
+     * refusals, so it is offered again as the first time and its supplies are given again on
+     * accepting. What they were already given (supplies, rewards) stays theirs. Other quests
+     * are left alone.
      */
     public void forget(MinecraftServer server, UUID uuid, String questId) {
         Owner owner = Owner.player(uuid);
         records.setAny(owner, questId, null);
         records.setAny(owner, QuestProgress.key(questId), null);
+        records.setAny(owner, QuestDeclines.key(questId), null);
         ServerPlayer online = server.getPlayerList().getPlayer(uuid);
         if (online != null) {
             sync(online);

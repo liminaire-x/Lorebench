@@ -12,14 +12,15 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * Player → server: the player accepted an offer or handed a quest in, in the dialogue
- * they have open. The server checks everything again before doing it ({@link Dialogues}).
- * Registered with {@link DialoguePayload#register}.
+ * Player → server: the player accepted or turned down an offer, or handed a quest in, in
+ * the dialogue they have open. The server checks everything again before doing it
+ * ({@link Dialogues}). Registered with {@link DialoguePayload#register}.
  */
 public record DialogueChoicePayload(Action action, String questId) implements CustomPacketPayload {
 
     public enum Action {
         ACCEPT,
+        DECLINE,
         HAND_IN
     }
 

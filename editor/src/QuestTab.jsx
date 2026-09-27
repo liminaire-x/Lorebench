@@ -104,10 +104,11 @@ function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goal
   )
 }
 
-const STATE_LABEL = { active: 'in progress', ready: 'ready to hand in', done: 'done' }
+const STATE_LABEL = { hidden: 'not taken', active: 'in progress', ready: 'ready to hand in', done: 'done' }
 
-// Who is on this (published) quest or has done it, online or not, and a way to take
-// one of them back to before it: offered again, supplies given again, progress from 0.
+// Who is on this (published) quest, has done it or turned it down, online or not, and a
+// way to take one of them back to before it: offered again as the first time, supplies
+// given again, progress from 0.
 function QuestPlayers({ quest, setMessage }) {
   const [rows, setRows] = useState(null) // null = not read yet
   const load = useCallback(async () => {
@@ -126,7 +127,7 @@ function QuestPlayers({ quest, setMessage }) {
   }).join(' · ')
 
   const reset = async (p) => {
-    if (!window.confirm(`Take ${p.name} back to before "${quest.title}"?\n\nIt will be offered again, supplies are given again on accepting, and progress starts from 0. What they already got stays theirs.`)) return
+    if (!window.confirm(`Take ${p.name} back to before "${quest.title}"?\n\nIt will be offered again as the first time (refusals forgotten), supplies are given again on accepting, and progress starts from 0. What they already got stays theirs.`)) return
     try {
       const r = await fetch('/api/quest-reset', { method: 'POST', body: JSON.stringify({ quest: quest.id, player: p.uuid }) }).then((res) => res.json())
       setMessage(r.ok ? { ok: true, text: `${p.name} is back to before "${quest.title}".` } : { ok: false, text: r.error || 'Reset failed.' })
@@ -139,7 +140,7 @@ function QuestPlayers({ quest, setMessage }) {
   return (
     <Section title="Players">
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <span style={hint}>Who is on this quest or has done it (as last published).</span>
+        <span style={hint}>Who is on this quest, has done it or turned it down (as last published).</span>
         <button onClick={load} title="Refresh" style={{ cursor: 'pointer', marginLeft: 'auto' }}>↻</button>
       </div>
       {rows === null ? <div style={hint}>Reading…</div>
@@ -148,7 +149,7 @@ function QuestPlayers({ quest, setMessage }) {
           <div key={p.uuid} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
             <span style={{ flex: 1 }}>
               {p.name}{!p.online && <span style={hint}> (offline)</span>}
-              <span style={{ ...hint, marginLeft: 6 }}>{STATE_LABEL[p.state] || p.state}{p.state !== 'done' && counts(p.progress) ? ' · ' + counts(p.progress) : ''}</span>
+              <span style={{ ...hint, marginLeft: 6 }}>{STATE_LABEL[p.state] || p.state}{p.state !== 'done' && counts(p.progress) ? ' · ' + counts(p.progress) : ''}{p.timesDeclined ? ` · declined ${p.timesDeclined}×` : ''}</span>
             </span>
             <button onClick={() => reset(p)} style={{ cursor: 'pointer', color: '#c0392b' }}>Reset</button>
           </div>
@@ -359,6 +360,8 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                 <LineList lines={quest.lines?.offer} onChange={(v) => setLines('offer', v)} placeholder="밀 10개만 구해다 주겠나?" />
                 <div style={{ margin: '10px 0 3px' }}>After accepting <span style={hint}>(the giver, right after Accept)</span></div>
                 <LineList lines={quest.lines?.accepted} onChange={(v) => setLines('accepted', v)} placeholder="자, 이 씨앗으로 시작하게." />
+                <div style={{ margin: '10px 0 3px' }}>After declining <span style={hint}>(the giver, right after Decline; offered again next time)</span></div>
+                <LineList lines={quest.lines?.declined} onChange={(v) => setLines('declined', v)} placeholder="그래… 무리한 부탁이지." />
                 <div style={{ margin: '10px 0 3px' }}>In progress <span style={hint}>(the receiver; with no lines the quest shows but can't be chosen)</span></div>
                 <LineList lines={quest.lines?.active} onChange={(v) => setLines('active', v)} placeholder="아직 부족하구먼." />
                 <div style={{ margin: '10px 0 3px' }}>Hand in <span style={hint}>(the receiver, before Hand over)</span></div>

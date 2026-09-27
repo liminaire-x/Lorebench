@@ -63,12 +63,13 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      *
      * @param offer    when the giver offers it
      * @param accepted right after the player accepts it (0010)
+     * @param declined right after the player turns it down (0012)
      * @param active   when the player talks to the receiver while it is in progress
      * @param complete when the player hands it in
      */
-    public record Lines(List<Line> offer, List<Line> accepted, List<Line> active, List<Line> complete) {
+    public record Lines(List<Line> offer, List<Line> accepted, List<Line> declined, List<Line> active, List<Line> complete) {
 
-        public static final Lines NONE = new Lines(List.of(), List.of(), List.of(), List.of());
+        public static final Lines NONE = new Lines(List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     /**

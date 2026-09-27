@@ -34,8 +34,8 @@ import java.util.regex.Pattern;
  *   "quests": [ {
  *   "id": "quest_k3f9x2ma", "title": "밀 배달", "icon": "minecraft:wheat", "text": "...", "folder": "folder_9fm3a0pe",
  *   "giver": "npc_7ha2m0qe", "receiver": "npc_7ha2m0qe", "requires": [ "quest_p0a8s1dd" ],
- *   "lines": { "offer": [ "밀 10개만 구해다 주겠나?" ], "accepted": [ "부탁하네." ], "active": [ "아직 부족하구먼." ],
- *              "complete": [ "고맙네!" ] },
+ *   "lines": { "offer": [ "밀 10개만 구해다 주겠나?" ], "accepted": [ "부탁하네." ], "declined": [ "그런가…" ],
+ *              "active": [ "아직 부족하구먼." ], "complete": [ "고맙네!" ] },
  *   "supplies": [ { "item": "minecraft:wheat_seeds", "count": 5 } ],
  *   "goals":   [ { "item": "minecraft:wheat",   "count": 10 }, { "kill": "minecraft:wolf", "count": 3 },
  *                { "harvest": "minecraft:potatoes", "count": 5 }, { "breed": "minecraft:cow", "count": 2 } ],
@@ -168,7 +168,7 @@ public final class QuestFormat {
     }
 
     /** The keys of {@code lines}. Never rename: they are saved. */
-    private static final List<String> LINE_KEYS = List.of("offer", "accepted", "active", "complete");
+    private static final List<String> LINE_KEYS = List.of("offer", "accepted", "declined", "active", "complete");
 
     private static QuestDoc.Lines lines(JsonElement e, String where, List<String> errors) {
         if (e == null) {
@@ -187,6 +187,7 @@ public final class QuestFormat {
         return new QuestDoc.Lines(
                 DialogueLines.read(o.get("offer"), where + " offer", errors),
                 DialogueLines.read(o.get("accepted"), where + " accepted", errors),
+                DialogueLines.read(o.get("declined"), where + " declined", errors),
                 DialogueLines.read(o.get("active"), where + " active", errors),
                 DialogueLines.read(o.get("complete"), where + " complete", errors));
     }
@@ -377,7 +378,7 @@ public final class QuestFormat {
         }
         JsonObject lines = new JsonObject();
         QuestDoc.Lines l = flow.lines();
-        List<List<DialogueLines.Line>> all = List.of(l.offer(), l.accepted(), l.active(), l.complete());
+        List<List<DialogueLines.Line>> all = List.of(l.offer(), l.accepted(), l.declined(), l.active(), l.complete());
         for (int i = 0; i < LINE_KEYS.size(); i++) {
             if (!all.get(i).isEmpty()) {
                 lines.add(LINE_KEYS.get(i), DialogueLines.write(all.get(i)));

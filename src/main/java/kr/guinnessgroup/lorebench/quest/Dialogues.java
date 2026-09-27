@@ -80,7 +80,10 @@ public final class Dialogues {
         send(player, def, npc, plan, false, List.of());
     }
 
-    /** The player accepted an offer or handed a quest in. Anything that no longer holds is ignored. */
+    /**
+     * The player accepted or turned down an offer, or handed a quest in. Anything that no
+     * longer holds is ignored. A refusal is remembered (0012).
+     */
     public void choose(ServerPlayer player, DialogueChoicePayload choice) {
         Talk talk = talks.get(player.getUUID());
         Npcs npcs = Npcs.current();
@@ -91,18 +94,25 @@ public final class Dialogues {
             talks.remove(player.getUUID());
             return;
         }
-        Dialogue.Kind needed = choice.action() == DialogueChoicePayload.Action.ACCEPT ? Dialogue.Kind.OFFER : Dialogue.Kind.READY;
+        Dialogue.Kind needed = choice.action() == DialogueChoicePayload.Action.HAND_IN ? Dialogue.Kind.READY : Dialogue.Kind.OFFER;
         boolean allowed = plan(player, def.id()).stream()
                 .anyMatch(e -> e.kind() == needed && e.quest().id().equals(choice.questId()));
         List<DialogueLines.Line> said = List.of();
         if (!allowed) {
             LOGGER.debug("[Lorebench] {} chose {} {} with {}, which no longer holds",
                     player.getGameProfile().getName(), choice.action(), choice.questId(), def.id());
-        } else if (choice.action() == DialogueChoicePayload.Action.ACCEPT) {
-            quests.reveal(player, choice.questId());
-            said = runtime.quest(choice.questId()).flow().lines().accepted();
         } else {
-            quests.complete(player, choice.questId());
+            switch (choice.action()) {
+                case ACCEPT -> {
+                    quests.reveal(player, choice.questId());
+                    said = runtime.quest(choice.questId()).flow().lines().accepted();
+                }
+                case DECLINE -> {
+                    quests.decline(player, choice.questId());
+                    said = runtime.quest(choice.questId()).flow().lines().declined();
+                }
+                case HAND_IN -> quests.complete(player, choice.questId());
+            }
         }
         send(player, def, npc, plan(player, def.id()), true, said);
     }

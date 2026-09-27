@@ -28,8 +28,8 @@ import java.util.List;
  * everything else the NPC can talk about. Lines show one page at a time; a click,
  * Space or Enter turns the page, and a line's animation plays as its page shows (once,
  * or looped until the page turns), on this screen only (other players don't see this talk).
- * The first page waits while the NPC plays its talk start (0011); a click skips the wait. Accepting and handing in go
- * to the server, which checks them and sends the list back.
+ * The first page waits while the NPC plays its talk start (0011); a click skips the wait. Accepting, declining and
+ * handing in go to the server, which checks them and sends back what the NPC says to that and the list.
  */
 final class DialogueScreen extends Screen {
 
@@ -252,7 +252,7 @@ final class DialogueScreen extends Screen {
             switch (shown.kind()) {
                 case OFFER -> {
                     button("lorebench.dialogue.accept", x + PAD, y, half, () -> choose(DialogueChoicePayload.Action.ACCEPT));
-                    button("lorebench.dialogue.decline", x + PAD * 2 + half, y, half, this::showList);
+                    button("lorebench.dialogue.decline", x + PAD * 2 + half, y, half, () -> choose(DialogueChoicePayload.Action.DECLINE));
                 }
                 case READY -> {
                     button("lorebench.dialogue.hand_in", x + PAD, y, half, () -> choose(DialogueChoicePayload.Action.HAND_IN));
