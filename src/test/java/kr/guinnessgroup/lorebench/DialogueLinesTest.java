@@ -40,6 +40,24 @@ class DialogueLinesTest {
     }
 
     @Test
+    void anAnimationCanLoopWhileThePageShows() {
+        List<String> errors = new ArrayList<>();
+        List<DialogueLines.Line> lines = read("""
+                [ { "text": "이 밭 좀 보게.", "animation": { "name": " animation.chief.point ", "play": "loop" } },
+                  { "text": "고맙네!", "animation": { "name": "animation.chief.happy" } } ]
+                """, errors);
+        assertEquals(List.of(), errors);
+        assertEquals(List.of(
+                new DialogueLines.Line("이 밭 좀 보게.", "animation.chief.point", DialogueLines.Play.LOOP),
+                new DialogueLines.Line("고맙네!", "animation.chief.happy", DialogueLines.Play.ONCE)), lines);
+        // Playing once is always written as the bare name.
+        String written = DialogueLines.write(lines).toString();
+        assertEquals("[{\"text\":\"이 밭 좀 보게.\",\"animation\":{\"name\":\"animation.chief.point\",\"play\":\"loop\"}},"
+                + "{\"text\":\"고맙네!\",\"animation\":\"animation.chief.happy\"}]", written);
+        assertEquals(lines, read(written, errors));
+    }
+
+    @Test
     void badLinesAreRejected() {
         for (String bad : new String[] {
                 "\"hi\"",                                                    // not a list
@@ -49,7 +67,12 @@ class DialogueLinesTest {
                 "[ { \"text\": \" \", \"animation\": \"animation.a\" } ]",   // empty text
                 "[ { \"text\": \"hi\", \"animation\": \" \" } ]",            // empty animation
                 "[ { \"text\": \"hi\", \"animation\": 3 } ]",                // animation not text
-                "[ { \"text\": \"hi\", \"anim\": \"animation.a\" } ]"}) {    // unknown key
+                "[ { \"text\": \"hi\", \"anim\": \"animation.a\" } ]",       // unknown key
+                "[ { \"text\": \"hi\", \"animation\": { \"play\": \"loop\" } } ]",                  // no name
+                "[ { \"text\": \"hi\", \"animation\": { \"name\": \" \" } } ]",                     // empty name
+                "[ { \"text\": \"hi\", \"animation\": { \"name\": \"a\", \"play\": \"once\" } } ]", // only loop
+                "[ { \"text\": \"hi\", \"animation\": { \"name\": \"a\", \"play\": \"hold\" } } ]", // not yet
+                "[ { \"text\": \"hi\", \"animation\": { \"name\": \"a\", \"loop\": true } } ]"}) {  // unknown key
             List<String> errors = new ArrayList<>();
             read(bad, errors);
             assertFalse(errors.isEmpty(), bad);

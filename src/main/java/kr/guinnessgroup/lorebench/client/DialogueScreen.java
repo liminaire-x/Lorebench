@@ -26,8 +26,8 @@ import java.util.List;
  * Talking to an NPC (0009). The talk starts with the first thing the player can do
  * (hand in, then a new offer), else with the NPC's greeting; afterwards a list shows
  * everything else the NPC can talk about. Lines show one page at a time; a click,
- * Space or Enter turns the page, and a line's animation plays as its page shows, on
- * this screen only (other players don't see this talk). Accepting and handing in go
+ * Space or Enter turns the page, and a line's animation plays as its page shows (once,
+ * or looped until the page turns), on this screen only (other players don't see this talk). Accepting and handing in go
  * to the server, which checks them and sends the list back.
  */
 final class DialogueScreen extends Screen {
@@ -113,6 +113,10 @@ final class DialogueScreen extends Screen {
 
     private void nextPage() {
         if (++page >= pages.size()) {
+            NpcEntity npc = npc();
+            if (npc != null) {
+                npc.showLine("", false); // a line looping on the last page stops
+            }
             Runnable then = afterPages;
             afterPages = null;
             then.run();
@@ -121,12 +125,15 @@ final class DialogueScreen extends Screen {
         }
     }
 
-    /** The shown line's animation, played by the NPC being talked to, on this screen only. */
+    /**
+     * The shown line's animation, played by the NPC being talked to, on this screen only.
+     * Told on every page, so a line looping on the page before stops.
+     */
     private void animate() {
-        String animation = pages.get(page).animation();
+        DialogueLines.Line line = pages.get(page);
         NpcEntity npc = npc();
-        if (!animation.isEmpty() && npc != null) {
-            npc.playLocally(animation);
+        if (npc != null) {
+            npc.showLine(line.animation(), line.play() == DialogueLines.Play.LOOP);
         }
     }
 

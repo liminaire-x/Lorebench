@@ -49,7 +49,7 @@ public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.
 
     /** Registers both dialogue messages. Handled on the main thread (the registrar's default). */
     public static void register(RegisterPayloadHandlersEvent event) {
-        event.registrar("3")
+        event.registrar("4")
                 .playToClient(TYPE, CODEC, (payload, context) -> ClientDialogue.accept(payload))
                 .playToServer(DialogueChoicePayload.TYPE, DialogueChoicePayload.CODEC, (choice, context) -> {
                     Dialogues dialogues = Dialogues.current();
@@ -100,6 +100,7 @@ public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.
         for (DialogueLines.Line l : lines) {
             buf.writeUtf(l.text());
             buf.writeUtf(l.animation());
+            buf.writeEnum(l.play());
         }
     }
 
@@ -107,7 +108,7 @@ public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.
         int n = buf.readVarInt();
         List<DialogueLines.Line> lines = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            lines.add(new DialogueLines.Line(buf.readUtf(), buf.readUtf()));
+            lines.add(new DialogueLines.Line(buf.readUtf(), buf.readUtf(), buf.readEnum(DialogueLines.Play.class)));
         }
         return List.copyOf(lines);
     }

@@ -16,19 +16,40 @@ import java.util.Set;
 /**
  * What an NPC says, as a list of lines shown one page at a time. Used by a quest's
  * lines and an NPC's greeting. A line is text, or text with an animation the NPC
- * plays when the page shows:
- * <pre>[ "고맙네!", { "text": "약속한 에메랄드일세.", "animation": "animation.chief.happy" } ]</pre>
- * A line without an animation is always written as plain text, so documents without
- * animations look as before. See docs/decisions/0009-quest-workbench.md.
+ * plays when the page shows, by name (once) or as { name, play }:
+ * <pre>[ "고맙네!", { "text": "약속한 에메랄드일세.", "animation": "animation.chief.happy" },
+ *   { "text": "이 밭 좀 보게.", "animation": { "name": "animation.chief.point", "play": "loop" } } ]</pre>
+ * A line without an animation is always written as plain text, and an animation played
+ * once always as a name, so older documents look as before. See
+ * docs/decisions/0009-quest-workbench.md and docs/decisions/0011-talk-gestures.md.
  */
 public final class DialogueLines {
+
+    /** How a line's animation plays. Saved by {@link #json} name, never rename. */
+    public enum Play {
+        /** Once when the page shows (written as the bare name). */
+        ONCE("once"),
+        /** Over and over while the page shows. */
+        LOOP("loop");
+
+        public final String json;
+
+        Play(String json) {
+            this.json = json;
+        }
+    }
 
     /**
      * One page of dialogue.
      *
-     * @param animation played once by the NPC when the page shows, or ""
+     * @param animation played by the NPC when the page shows, or ""
+     * @param play      how it plays ({@link Play#ONCE} when there is no animation)
      */
-    public record Line(String text, String animation) {
+    public record Line(String text, String animation, Play play) {
+
+        public Line(String text, String animation) {
+            this(text, animation, Play.ONCE);
+        }
 
         public static Line of(String text) {
             return new Line(text, "");
@@ -37,6 +58,8 @@ public final class DialogueLines {
 
     /** The keys of a line written as an object. Never rename: they are saved. */
     private static final Set<String> KEYS = Set.of("text", "animation");
+    /** The keys of an animation written as an object. Never rename: they are saved. */
+    private static final Set<String> ANIMATION_KEYS = Set.of("name", "play");
 
     private DialogueLines() {}
 
@@ -94,12 +117,38 @@ public final class DialogueLines {
             errors.add(where + ": a line needs its text");
             return null;
         }
-        if (animation != null && (!isText(animation) || animation.getAsString().isBlank())) {
-            errors.add(where + ": the animation of '" + text.getAsString() + "' must be a name like animation.chief.happy");
+        if (animation == null) {
+            return Line.of(text.getAsString());
+        }
+        String of = "the animation of '" + text.getAsString() + "'";
+        JsonElement name = animation;
+        Play play = Play.ONCE;
+        if (animation.isJsonObject()) {
+            JsonObject a = animation.getAsJsonObject();
+            for (String key : a.keySet()) {
+                if (!ANIMATION_KEYS.contains(key)) {
+                    errors.add(where + ": unknown '" + key + "' in " + of + " (use name, play)");
+                    return null;
+                }
+            }
+            name = a.get("name");
+            JsonElement p = a.get("play");
+            // Only "loop" for now: playing once is written as the bare name (0011).
+            if (p != null) {
+                if (!isText(p) || !p.getAsString().equals(Play.LOOP.json)) {
+                    errors.add(where + ": " + of + " can only play 'loop' (write just the name to play it once)");
+                    return null;
+                }
+                play = Play.LOOP;
+            }
+        }
+        if (!isText(name) || name.getAsString().isBlank()) {
+            errors.add(where + ": " + of + " must be a name like animation.chief.happy");
             return null;
         }
-        return new Line(text.getAsString(), animation == null ? "" : animation.getAsString().trim());
+        return new Line(text.getAsString(), name.getAsString().trim(), play);
     }
+
 
     private static boolean isText(JsonElement e) {
         return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isString();
@@ -113,7 +162,14 @@ public final class DialogueLines {
             } else {
                 JsonObject o = new JsonObject();
                 o.addProperty("text", l.text());
-                o.addProperty("animation", l.animation());
+                if (l.play() == Play.ONCE) {
+                    o.addProperty("animation", l.animation());
+                } else {
+                    JsonObject a = new JsonObject();
+                    a.addProperty("name", l.animation());
+                    a.addProperty("play", l.play().json);
+                    o.add("animation", a);
+                }
                 arr.add(o);
             }
         }
