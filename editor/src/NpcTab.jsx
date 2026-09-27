@@ -53,6 +53,18 @@ export default function NpcTab({ npcs, setNpcs, folders, setFolders, placements,
     }))
   }
 
+  // The voice (0014): a sound name, or { sound, pitch } when the pitch isn't 1. No sound = none.
+  const voiceSound = typeof npc?.voice === 'string' ? npc.voice : npc?.voice?.sound ?? ''
+  const voicePitch = typeof npc?.voice === 'object' && npc.voice ? npc.voice.pitch : ''
+  const setVoice = (sound, pitch) => {
+    setNpcs((ns) => ns.map((n) => {
+      if (n.id !== npc.id) return n
+      const { voice, ...rest } = n
+      if (sound.trim() === '') return rest
+      return { ...rest, voice: pitch === '' || Number(pitch) === 1 ? sound.trim() : { sound: sound.trim(), pitch: Number(pitch) } }
+    }))
+  }
+
   const setGreeting = (lines) => {
     setNpcs((ns) => ns.map((n) => {
       if (n.id !== npc.id) return n
@@ -124,6 +136,20 @@ export default function NpcTab({ npcs, setNpcs, folders, setFolders, placements,
                       <input value={npc.talk?.[key] ?? ''} placeholder={example} onChange={(e) => setTalk(key, e.target.value)} style={input} />
                     </label>
                   ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <label style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ marginBottom: 3 }}>
+                      Voice <span style={hint}>(each letter as its lines type out; only the talking player hears it; empty = silent)</span>
+                    </div>
+                    <input value={voiceSound} placeholder="e.g. minecraft:block.note_block.bass"
+                      onChange={(e) => setVoice(e.target.value, voicePitch)} style={input} />
+                  </label>
+                  <label style={{ width: 90 }}>
+                    <div style={{ marginBottom: 3 }}>Pitch <span style={hint}>(0.5–2)</span></div>
+                    <input type="number" step="0.1" min="0.5" max="2" value={voicePitch} placeholder="1" disabled={!voiceSound}
+                      onChange={(e) => setVoice(voiceSound, e.target.value)} style={input} />
+                  </label>
                 </div>
               </Section>
 

@@ -1,4 +1,5 @@
 // Parts shared by the quest and NPC tabs.
+import { useRef, useState } from 'react'
 
 const input = { width: '100%', padding: '4px 6px', boxSizing: 'border-box' }
 
@@ -28,16 +29,50 @@ const makeLine = (text, animation, loop) => {
   return { text, animation: loop ? { name: animation, play: 'loop' } : animation }
 }
 
+// Cues inside a line's text (Cues.java, 0014), each working from where it stands to the end
+// of the page: [cue as inserted, where the value to type starts and ends in it, what it does].
+const CUES = [
+  ['<speed=0.5>', 7, 10, 'From here, this many times the usual typing speed (0.5 = slower, 2 = faster) until the page ends'],
+  ['<pause=1>', 7, 8, 'Stop typing here for this many seconds (up to 10)'],
+  ['<play=>', 6, 6, 'The NPC plays an animation here, once: type its name, like animation.chief.happy'],
+  ['<loop=>', 6, 6, 'The NPC repeats an animation from here until the page turns: type its name'],
+  ['<voice=none>', 12, 12, 'No voice sound from here (narration, a silent moment)'],
+  ['<voice>', 7, 7, "The NPC's own voice again from here"],
+]
+
 // What an NPC says: one page per line, shown in this order. An empty list means
-// nothing to say; the caller drops it from the document.
+// nothing to say; the caller drops it from the document. The cue buttons write into the
+// line that last had the cursor, at the cursor, with the value selected to type over.
 export function LineList({ lines = [], onChange, placeholder }) {
+  const areas = useRef([])
+  const [at, setAt] = useState(null)
   const set = (i, text, animation, loop) => onChange(lines.map((l, j) => (j === i ? makeLine(text, animation, loop) : l)))
+  const insertCue = ([cue, from, to]) => {
+    const i = at !== null && at < lines.length ? at : lines.length - 1
+    const area = areas.current[i]
+    if (i < 0 || !area) return
+    const text = lineText(lines[i])
+    const start = area.selectionStart ?? text.length
+    const end = area.selectionEnd ?? start
+    set(i, text.slice(0, start) + cue + text.slice(end), lineAnimation(lines[i]), lineLoops(lines[i]))
+    requestAnimationFrame(() => { area.focus(); area.setSelectionRange(start + from, start + to) })
+  }
   return (
     <div>
+      {lines.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', marginBottom: 3, fontSize: 11, color: '#888' }}>
+          <span title="A '<' before a letter starts a cue; each works until the page ends">Cues at the cursor:</span>
+          {CUES.map((c) => (
+            <button key={c[0]} title={c[3]} onMouseDown={(e) => e.preventDefault()} onClick={() => insertCue(c)}
+              style={{ cursor: 'pointer', fontSize: 11, fontFamily: 'monospace', padding: '0 4px' }}>{c[0]}</button>
+          ))}
+        </div>
+      )}
       {lines.map((line, i) => (
         <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 3, alignItems: 'flex-start' }}>
           <span style={{ color: '#888', fontSize: 11, width: 16, paddingTop: 5 }}>{i + 1}</span>
           <textarea
+            ref={(el) => { areas.current[i] = el }} onFocus={() => setAt(i)}
             value={lineText(line)} rows={1} placeholder={placeholder}
             onChange={(e) => set(i, e.target.value, lineAnimation(line), lineLoops(line))}
             style={{ ...input, flex: 1, resize: 'vertical', fontFamily: 'inherit' }}
