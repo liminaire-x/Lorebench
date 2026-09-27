@@ -23,10 +23,10 @@
 - `graph/` — 저장된 그래프 문서(`GraphDoc`)와 그 읽기·쓰기(`GraphFormat`, format 1). 모양만 검사.
 - `runtime/` — 노드 종류(`NodeType`·`Field`·`NodeRegistry`), 문서 → 실행 그래프(`GraphBuilder`), 실행(`Runner`, 즉시·동기), 발행·트리거(`LorebenchRuntime`).
 - `record/` — 기록(`Owner`·`RecordStore` 캐시·`H2RecordBackend`, schema 1).
-- `npc/` — NPC 정의 문서(`NpcFormat`, format 1)·배치(`Placement`, 서버 기록)·엔티티(`NpcEntity`)·명령어·`Npcs`(게임 쪽 창구).
+- `npc/` — NPC 정의 문서(`NpcFormat`, format 1)·배치(`Placement`, 서버 기록)·엔티티(`NpcEntity`: 애니메이션 층 = 평소/대화 한 벌 위에 한 번·반복 줄, 0011)·명령어·`Npcs`(게임 쪽 창구).
 - `quest/` — 퀘스트 문서(`QuestDoc`·`QuestFormat`, format 1)·상태(`QuestState`)·진행 기록(`QuestProgress`, `<종류>:<대상>`)·`Quests`(게임 쪽 창구: 세기·공개·완료·되돌리기)·`Crops`·`Breeding`(수확·번식 목표가 받는 것)·`QuestSyncPayload`(공개된 퀘스트만 그 플레이어에게). 대화: `Dialogue`(순수 로직: 할 이야기 계산)·`Dialogues`(서버 쪽 대화, 선택 재확인)·`DialoguePayload`/`DialogueChoicePayload`.
 - `nodes/` — 빌트인 노드. 노드당 파일 하나, `BuiltinNodes.registerAll`.
-- `client/` — 클라이언트 전용(`NpcRenderer`: GeckoLib 모델 있으면 그것, 없으면 스티브 / `NpcGeoModel`: 리소스 경로 규칙 / `QuestScreen`: `J` 퀘스트 화면 / `DialogueScreen`: 대화창 / `QuestCard`: 필요한 것·보상 그리기(둘이 공유) / `ClientQuests`·`ClientDialogue`: 받은 것 보관). `FMLEnvironment.dist == CLIENT`일 때만 로드.
+- `client/` — 클라이언트 전용(`NpcRenderer`: GeckoLib 모델 있으면 그것, 없으면 스티브, 대화 중 돌아보기는 그릴 때만 / `NpcGeoModel`: 리소스 경로 규칙 / `QuestScreen`: `J` 퀘스트 화면 / `DialogueScreen`: 대화창 / `QuestCard`: 필요한 것·보상 그리기(둘이 공유) / `ClientQuests`·`ClientDialogue`: 받은 것 보관). `FMLEnvironment.dist == CLIENT`일 때만 로드.
 - `web/` — 에디터 서버. `Lorebench.java` — 부트스트랩·게임 이벤트 연결. `LorebenchConfig` — `serverName`. `Folders` — 세 문서가 함께 쓰는 에디터 폴더(읽기·쓰기·검사). `DialogueLines` — 대사(한 줄 = 한 페이지) 읽기·쓰기.
 - 결정 기록: [0001 저장 형식](docs/decisions/0001-storage-format.md), [0002 NPC](docs/decisions/0002-npc.md), [0003 NPC 외형](docs/decisions/0003-npc-looks.md), [0004 id·기록 키](docs/decisions/0004-ids-and-record-keys.md), [0005 퀘스트](docs/decisions/0005-quests.md), [0006 아이템 표기](docs/decisions/0006-item-syntax.md), [0007 이름](docs/decisions/0007-rename-lorebench.md), [0008 폴더](docs/decisions/0008-quest-folders.md), [0009 퀘스트 작업대](docs/decisions/0009-quest-workbench.md), [0010 수확·번식 목표·지급품](docs/decisions/0010-farming-goals.md), [0011 대화 몸짓](docs/decisions/0011-talk-gestures.md).
 
