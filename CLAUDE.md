@@ -38,6 +38,9 @@
 - 배경: 사용자는 설계·기획 전공이 아니라고 밝혔고, 작은 결정이 나중에 부메랑이 될까 봐 모든 결정을 첫
   단추처럼 다룬다. 쉬운 말로, 되돌리는 비용부터. 설명이 안 통하면 비유와 구체적 장면으로 다시 쓴다.
   다이어그램을 요청하면 `show_widget`으로 그린다.
+- 결정을 도울 때 **다른 사례(게임·엔진·도구) 비교표**를 준다: 사례 / 모양 / "우리는 어느 쪽 + 나중에 무엇이 바뀌나".
+  사용자는 사례에서 큰 방향을 스스로 끌어낸다. 개념을 설명할 때는 활용처를 "지금 · 이미 비슷한 것 · 나중"으로 나눠 보인다.
+  사용자가 설계를 일반화하면(예: `reoffer` 칸 → 조건 if/else) 맞다고 분명히 하고 A/B 비교로 다시 정리한다.
 - **개발 단계(첫 공개 전)엔 변환 대신 초기화**: 형식·키 규칙이 바뀌면 변환 코드를 쓰지 않고
   `run/config/lorebench/`를 초기화한다(무엇을 지우는지 먼저 알림). 그래서 비싼 이유가 "옛 로컬 데이터
   변환"뿐이면 지금은 싸다. 첫 공개 뒤엔 형식 번호 + 변환.
@@ -49,7 +52,7 @@
 - 응답/문서 언어: **한국어**. git commit 언어: **영어**. Lorebench(로어벤치)는 모음으로 끝난다 → "Lorebench**는/를/가/와**".
 - 저장소: 로컬 `C:\Users\gntod\MyProjects\Intellij\LoreBench`, 원격 `https://github.com/liminaire-x/Lorebench.git`. Gradle 프로젝트 이름은 `settings.gradle`에서 `lorebench`로 고정(폴더 이름과 무관).
 - **인수인계 문서 `docs/handoff.md`는 로컬 전용**: 커밋하지 않는다(`.gitignore`에 있음).
-- 프런트: React + React Flow(@xyflow/react), Vite 단일 index.html. `editor/` 소스 → Gradle buildEditor/packEditor로 패키징. 헤더 탭: `App.jsx`(그래프 탭·Publish·문서 상태), `QuestTab.jsx`(퀘스트 트리·편집), `NpcTab.jsx`(NPC 트리·섹션), `FolderTree.jsx`(세 탭이 함께 쓰는 폴더 트리·폴더 편집), `Section.jsx`(카드·대사 줄 목록).
+- 프런트: React + React Flow(@xyflow/react), Vite 단일 index.html. `editor/` 소스 → Gradle buildEditor/packEditor로 패키징. 헤더 탭: `App.jsx`(그래프 탭·Publish·문서 상태), `QuestTab.jsx`(퀘스트 트리·편집), `NpcTab.jsx`(NPC 트리·섹션), `FolderTree.jsx`(세 탭이 함께 쓰는 폴더 트리·폴더 편집), `Section.jsx`(카드·대사 줄 목록·조건 묶음 편집 `SpeechEditor`). publish 직전 빈 줄·빈 조건 정리는 `App.jsx`의 `tidyNpc`·`tidyQuest`(`realSpeech`).
 - 웹 서버: JDK `HttpServer` 8080 (`web/LorebenchWebServer.java`).
 - **에이전트 환경에서 Java 컴파일 금지**(NeoForge 빌드가 무겁고 Windows Gradle 캐시와 꼬임). 컴파일/실행 확인은 **GitHub Actions CI**(push 시 클린 리눅스 빌드) 또는 **사용자 IntelliJ**(`runServer` + `runClient1`/`runClient2`, 두 플레이어 Dev1·Dev2).
 
@@ -81,4 +84,6 @@
   - 중간 단계 파이썬은 스크래치패드에 `.py`로 써서 실행하고 `if __name__ == '__main__':`를 둔다. 인라인 heredoc + `Remove-Item`을 한 PowerShell 호출에 이으면 조용히 실패한다.
   - `graphify-out/`은 git 밖. 마지막 빌드: 2026-09-27(목걸이 이야기 뒤, `--update`), 1312 노드·3289 연결·129 묶음, 중심 = `Quests`·`NpcEntity`·`LorebenchRuntime`·`DialogueScreen`·`Speech`. 0012 결정 기록은 Gemini 하루 한도로 미추출(다음 `--update`에서 자동 재시도). 문서 추출은 여전히 얕다(개념 일부만). 묶음 이름은 자동(중심 노드 + 주 파일).
   - `graphify export html` CLI는 이 환경에서 아무 말 없이 실패한다(exit 1) → `graphify.export.to_html(G, communities, 'graphify-out/graph.html', community_labels=labels)`로 직접 쓴다.
-- **셸 함정**: `sed` 치환에 `#` 구분자를 쓰면 `#minecraft:logs`, `## 제목`과 충돌한다. 파일 수정은 Edit 도구를 먼저, 셸 치환이 꼭 필요하면 `|` 구분자. 긴 파이썬 스크립트(특히 JSX·자바 코드가 든 수정 스크립트)는 **Bash heredoc으로 파일을 쓰는 것 자체**가 따옴표를 잘못 읽어 실패한다 → **Write 도구로** 스크래치패드에 `.py`를 쓰고 Bash로 실행(토큰은 거의 같고, 실패해 다시 쓰는 비용이 훨씬 큼). 수정은 `rep(old, new)` + `assert count == 1`로.
+- **셸 함정**: `sed` 치환에 `#` 구분자를 쓰면 `#minecraft:logs`, `## 제목`과 충돌한다. 파일 수정은 Edit 도구를 먼저, 셸 치환이 꼭 필요하면 `|` 구분자. 긴 파이썬 스크립트(특히 JSX·자바 코드가 든 수정 스크립트)는 **Bash heredoc으로 파일을 쓰는 것 자체**가 따옴표를 잘못 읽어 실패한다 → **Write 도구로** 스크래치패드에 `.py`를 쓰고 Bash로 실행(토큰은 거의 같고, 실패해 다시 쓰는 비용이 훨씬 큼). 수정은 `rep(old, new)` + `assert count == 1`로. 작업 사본은 CRLF라, 스크립트는 파일을 **줄바꿈을 가리지 않고 읽고**(`open(p, encoding='utf-8')`)
+  **`newline='\n'`으로 쓴다**(그러지 않으면 여러 줄 `old`가 안 맞는다. git이 커밋 때 맞춰 준다). sed로 `x.isEmpty()` 같은 걸 바꿀 땐
+  **`!`가 붙은 자리를 먼저 grep**한다(`!x.isEmpty()`가 `!x.size() == 0`이 되어 CI 컴파일이 실패한 적 있음).
