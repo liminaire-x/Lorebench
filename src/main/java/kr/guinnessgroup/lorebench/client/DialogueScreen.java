@@ -43,7 +43,7 @@ final class DialogueScreen extends Screen {
     private static final int GRAY = 0xFF909090;
     private static final int GOLD = 0xFFFFD84A;
 
-    /** WAIT: only the NPC's name shows while it plays its talk start. */
+    /** WAIT: nothing shows while the NPC plays its talk start (the user's choice; a click still skips it). */
     private enum Mode { WAIT, PAGES, CARD, LIST }
 
     private final QuestCard card = new QuestCard();
@@ -221,9 +221,6 @@ final class DialogueScreen extends Screen {
         if (mode == Mode.LIST) {
             return PAD * 2 + (talk.entries().size() + 1) * (BUTTON_H + 2);
         }
-        if (mode == Mode.WAIT) {
-            return 48;
-        }
         int lines = font.split(Component.literal(pages.get(page).text()), boxW() - PAD * 2).size();
         return Math.max(48, PAD * 2 + lines * (font.lineHeight + 2) + 8);
     }
@@ -341,7 +338,7 @@ final class DialogueScreen extends Screen {
         ItemStack hovered = ItemStack.EMPTY;
         if (mode == Mode.CARD) {
             hovered = drawCard(g, mouseX, mouseY);
-        } else if (mode != null) {
+        } else if (mode != null && mode != Mode.WAIT) {
             drawBox(g);
         }
         super.render(g, mouseX, mouseY, partialTick); // the buttons, on top
@@ -350,7 +347,7 @@ final class DialogueScreen extends Screen {
         }
     }
 
-    /** The bottom box with the NPC's name above it: a page of lines, or the list (waiting: the name only). */
+    /** The bottom box with the NPC's name above it: a page of lines, or the list. */
     private void drawBox(GuiGraphics g) {
         int x = boxX();
         int y = boxY();
@@ -360,9 +357,6 @@ final class DialogueScreen extends Screen {
         g.fill(x - 1, y - font.lineHeight - 7, x + nameW + 1, y, BORDER);
         g.fill(x, y - font.lineHeight - 6, x + nameW, y, PANEL);
         g.drawString(font, title, x + PAD, y - font.lineHeight - 2, GOLD);
-        if (mode == Mode.WAIT) {
-            return;
-        }
         g.fill(x - 1, y - 1, x + w + 1, y + h + 1, BORDER);
         g.fill(x, y, x + w, y + h, PANEL);
         if (mode == Mode.PAGES) {
