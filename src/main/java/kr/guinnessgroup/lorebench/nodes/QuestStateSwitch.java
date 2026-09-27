@@ -18,8 +18,9 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Where the player is with a quest: leaves through hidden / active / ready / done.
- * "Ready" means active with every goal in the player's inventory right now.
+ * Where the player is with a quest: leaves through hidden / active / waiting / ready / done.
+ * "Ready" means active with every goal in the player's inventory right now, or handed
+ * in and the wait is over (0013).
  */
 public final class QuestStateSwitch implements NodeType {
 

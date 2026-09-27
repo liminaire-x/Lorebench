@@ -36,7 +36,7 @@ class QuestFormatTest {
         QuestDoc doc = QuestFormat.read(WHEAT);
         QuestDoc.Quest q = doc.find("quest_k3f9x2ma");
         assertEquals(new QuestDoc.Quest("quest_k3f9x2ma", "밀 배달", "minecraft:wheat", "촌장에게 밀 10개를 가져다주자.\n빨리!",
-                List.of(QuestDoc.Goal.item("minecraft:wheat", 10)),
+                List.of(QuestDoc.Goal.item("minecraft:wheat", 10)), 0,
                 List.of(new QuestDoc.Stack("minecraft:emerald", 5)), List.of(), "", QuestDoc.Flow.NONE), q);
         assertNull(doc.find("quest_other"));
         assertEquals(List.of(), doc.folders());
@@ -129,6 +129,29 @@ class QuestFormatTest {
                   { "id": "quest_b", "title": "B", "requires": [ "quest_a" ], "goals": [], "rewards": [] },
                   { "id": "quest_a", "title": "A", "goals": [], "rewards": [] } ] }
                 """);
+    }
+
+    @Test
+    void aWaitIsGameDaysBetweenHandingInAndTheRewards() {
+        QuestDoc doc = QuestFormat.read("""
+                { "format": 1, "quests": [ { "id": "quest_order", "title": "칼 주문", "giver": "npc_smith",
+                  "goals": [ { "item": "minecraft:iron_ingot", "count": 5 } ],
+                  "wait": { "days": 1 },
+                  "rewards": [ { "item": "minecraft:iron_sword", "count": 1 } ] } ] }
+                """);
+        assertEquals(1, doc.find("quest_order").waitDays());
+        String written = QuestFormat.write(doc);
+        assertTrue(written.contains("\"wait\": {") && written.contains("\"days\": 1"), written);
+        assertEquals(doc, QuestFormat.read(written));
+        // No wait: the rewards come right away, and nothing is written.
+        assertEquals(0, QuestFormat.read(WHEAT).find("quest_k3f9x2ma").waitDays());
+        assertTrue(!QuestFormat.write(QuestFormat.read(WHEAT)).contains("\"wait\""));
+        for (String wait : List.of("1", "{}", "{ \"days\": 0 }", "{ \"days\": 1.5 }", "{ \"days\": \"1\" }",
+                "{ \"days\": 1, \"hours\": 2 }", "{ \"ticks\": 24000 }")) {
+            assertThrows(DocumentException.class, () -> QuestFormat.read(
+                    "{\"format\":1,\"quests\":[{\"id\":\"quest_a\",\"title\":\"A\",\"goals\":[],\"rewards\":[],\"wait\":"
+                            + wait + "}]}"), wait);
+        }
     }
 
     @Test

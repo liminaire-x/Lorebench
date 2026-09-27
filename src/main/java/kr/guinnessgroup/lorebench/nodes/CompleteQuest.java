@@ -17,7 +17,9 @@ import java.util.List;
 
 /**
  * Hands in a ready quest: takes the goal items, gives the rewards, and marks it
- * done. Place it after the "ready" way out of Quest State. If the quest is not
+ * done. A quest with a wait takes one step at a time, as the dialogue's buttons do
+ * (0013): handing in starts the wait, and once it is over (ready again) the rewards
+ * are given. Place it after the "ready" way out of Quest State. If the quest is not
  * ready for this player, nothing changes and the run stops (logged). A
  * "not ready" way out can be added later without breaking graphs that use "next".
  */

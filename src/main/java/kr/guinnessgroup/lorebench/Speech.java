@@ -252,7 +252,7 @@ public record Speech(List<Group> groups) {
             if (!Ids.valid(Ids.QUEST, s.getKey())) {
                 errors.add(where + ": " + QUEST_STATE + " quest '" + s.getKey() + "' " + Ids.rule(Ids.QUEST));
             } else if (state == null) {
-                errors.add(where + ": " + QUEST_STATE + " of '" + s.getKey() + "' must be hidden, active, ready or done");
+                errors.add(where + ": " + QUEST_STATE + " of '" + s.getKey() + "' must be hidden, active, waiting, ready or done");
             } else {
                 into.put(s.getKey(), state);
             }

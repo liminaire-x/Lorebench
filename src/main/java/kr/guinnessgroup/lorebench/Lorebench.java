@@ -44,6 +44,7 @@ import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
@@ -170,6 +171,11 @@ public final class Lorebench {
             }
         }
         feeders.forEach(player -> quests.onBreed(player, baby));
+    }
+
+    @SubscribeEvent
+    public void onServerTick(ServerTickEvent.Post event) {
+        quests.onServerTick(event.getServer());
     }
 
     @SubscribeEvent

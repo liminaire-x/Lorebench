@@ -25,8 +25,13 @@ import java.util.Map;
  */
 public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayload {
 
-    /** A revealed quest, whether the player has completed it, and their counted progress so far. */
-    public record Entry(QuestDoc.Quest quest, boolean done, Map<String, Integer> progress) {}
+    /**
+     * A revealed quest, where the player is with it, and their counted progress so far.
+     *
+     * @param state ACTIVE (the screen tells "ready" from the inventory itself), WAITING (handed in),
+     *              READY (handed in and the wait is over: the rewards can be taken) or DONE
+     */
+    public record Entry(QuestDoc.Quest quest, QuestState state, Map<String, Integer> progress) {}
 
     public static final Type<QuestSyncPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(Lorebench.MODID, "quests"));
@@ -36,7 +41,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // Handled on the client's main thread (the registrar's default).
-        event.registrar("4").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
+        event.registrar("5").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
     }
 
     @Override
@@ -48,7 +53,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
         buf.writeVarInt(quests.size());
         for (Entry e : quests) {
             writeQuest(buf, e.quest());
-            buf.writeBoolean(e.done());
+            buf.writeEnum(e.state());
             writeProgress(buf, e.progress());
         }
     }
@@ -58,16 +63,17 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
         List<Entry> quests = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             QuestDoc.Quest q = readQuest(buf);
-            boolean done = buf.readBoolean();
-            quests.add(new Entry(q, done, readProgress(buf)));
+            QuestState state = buf.readEnum(QuestState.class);
+            quests.add(new Entry(q, state, readProgress(buf)));
         }
         return new QuestSyncPayload(List.copyOf(quests));
     }
 
     /**
      * What a player's screen shows of a quest: id, title, icon, story, goals, rewards and supplies.
-     * Folders are for the editor only and givers and lines stay on the server (dialogue
-     * sends the lines it needs), so they aren't sent. Shared with {@link DialoguePayload}.
+     * Folders are for the editor only, and givers, lines and the wait stay on the server (dialogue
+     * sends the lines it needs, the state says whether it is waiting), so they aren't sent.
+     * Shared with {@link DialoguePayload}.
      */
     static void writeQuest(FriendlyByteBuf buf, QuestDoc.Quest q) {
         buf.writeUtf(q.id());
@@ -86,7 +92,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
 
     static QuestDoc.Quest readQuest(FriendlyByteBuf buf) {
         return new QuestDoc.Quest(buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(),
-                readGoals(buf), readStacks(buf), readStacks(buf), "", QuestDoc.Flow.NONE);
+                readGoals(buf), 0, readStacks(buf), readStacks(buf), "", QuestDoc.Flow.NONE);
     }
 
     static void writeProgress(FriendlyByteBuf buf, Map<String, Integer> progress) {

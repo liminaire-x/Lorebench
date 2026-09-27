@@ -71,7 +71,8 @@ export function LineList({ lines = [], onChange, placeholder }) {
 // without "when" is Otherwise. Plain lines are one Otherwise case, written as before.
 export const isCases = (v) => Array.isArray(v) && v.some((x) => x !== null && typeof x === 'object' && 'lines' in x)
 
-export const QUEST_STATES = [['hidden', 'not taken'], ['active', 'in progress'], ['ready', 'ready to hand in'], ['done', 'done']]
+export const QUEST_STATES = [['hidden', 'not taken'], ['active', 'in progress'], ['waiting', 'waiting (handed in)'],
+  ['ready', 'ready (to hand in, or to take after waiting)'], ['done', 'done']]
 
 const box = { border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px', marginBottom: 6 }
 const small = { cursor: 'pointer', fontSize: 11 }

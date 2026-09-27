@@ -42,12 +42,12 @@ final class QuestCard {
     private final Map<String, Predicate<ItemStack>> conditions = new HashMap<>();
 
     /** How tall {@link #needsAndRewards} draws a quest. */
-    int height(Font font, QuestDoc.Quest q, boolean supplies) {
+    int height(Font font, QuestDoc.Quest q, boolean supplies, boolean needs) {
         int h = 0;
         if (supplies && !q.supplies().isEmpty()) {
             h += 6 + font.lineHeight + 2 + q.supplies().size() * ROW_H;
         }
-        if (!q.goals().isEmpty()) {
+        if (needs && !q.goals().isEmpty()) {
             h += 6 + font.lineHeight + 2 + q.goals().size() * ROW_H;
         }
         if (!q.rewards().isEmpty()) {
@@ -62,10 +62,11 @@ final class QuestCard {
      * @param progress     this player's counted progress, by {@link QuestDoc.Goal#progressKey()}
      * @param showProgress show "3/10" from this player's inventory and progress; off shows "× 10"
      * @param supplies     show the supplies first (an offer: what accepting gives)
+     * @param needs        show the needs (off: taking the rewards of a quest handed in, 0013)
      * @return the item under the mouse, for a tooltip, or empty
      */
     ItemStack needsAndRewards(GuiGraphics g, Font font, QuestDoc.Quest q, Map<String, Integer> progress, boolean showProgress,
-                              boolean supplies, int x, int y, int mouseX, int mouseY) {
+                              boolean supplies, boolean needs, int x, int y, int mouseX, int mouseY) {
         ItemStack hovered = ItemStack.EMPTY;
         LocalPlayer player = minecraft.player;
         if (supplies && !q.supplies().isEmpty()) {
@@ -78,7 +79,7 @@ final class QuestCard {
                 y += ROW_H;
             }
         }
-        if (!q.goals().isEmpty()) {
+        if (needs && !q.goals().isEmpty()) {
             y += 6;
             g.drawString(font, Component.translatable("lorebench.quests.needs"), x, y, GRAY);
             y += font.lineHeight + 2;

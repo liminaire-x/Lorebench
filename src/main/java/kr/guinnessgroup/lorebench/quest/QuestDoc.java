@@ -30,14 +30,16 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      * @param icon    item id shown in the quest list, or "" for the first goal's item
      * @param text    the quest's story text, may be ""
      * @param goals   all must be met, shown in this order
+     * @param waitDays game days between handing the goals in and taking the rewards, or 0 for none
+     *                 (the rewards come right away); see docs/decisions/0013-waiting.md
      * @param rewards items given on completion
      * @param supplies items given once, the moment the quest becomes active (seeds to plant,
      *                 a letter to deliver); see docs/decisions/0010-farming-goals.md
      * @param folder  the folder id it sits in, or "" for the top
      * @param flow    who offers and receives it, what comes first, and what the NPCs say
      */
-    public record Quest(String id, String title, String icon, String text, List<Goal> goals, List<Stack> rewards,
-                        List<Stack> supplies, String folder, Flow flow) {}
+    public record Quest(String id, String title, String icon, String text, List<Goal> goals, int waitDays,
+                        List<Stack> rewards, List<Stack> supplies, String folder, Flow flow) {}
 
     /**
      * How a quest runs through NPC dialogue. See docs/decisions/0009-quest-workbench.md.

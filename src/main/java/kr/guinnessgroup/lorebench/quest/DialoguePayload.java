@@ -49,7 +49,7 @@ public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.
 
     /** Registers both dialogue messages. Handled on the main thread (the registrar's default). */
     public static void register(RegisterPayloadHandlersEvent event) {
-        event.registrar("6")
+        event.registrar("7")
                 .playToClient(TYPE, CODEC, (payload, context) -> ClientDialogue.accept(payload))
                 .playToServer(DialogueChoicePayload.TYPE, DialogueChoicePayload.CODEC, (choice, context) -> {
                     Dialogues dialogues = Dialogues.current();

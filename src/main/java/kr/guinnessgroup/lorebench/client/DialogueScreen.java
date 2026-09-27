@@ -28,8 +28,9 @@ import java.util.List;
  * everything else the NPC can talk about. Lines show one page at a time; a click,
  * Space or Enter turns the page, and a line's animation plays as its page shows (once,
  * or looped until the page turns), on this screen only (other players don't see this talk).
- * The first page waits while the NPC plays its talk start (0011); a click skips the wait. Accepting, declining and
- * handing in go to the server, which checks them and sends back what the NPC says to that and the list.
+ * The first page waits while the NPC plays its talk start (0011); a click skips the wait. Accepting, declining,
+ * handing in and taking the rewards after a wait (0013) go to the server, which checks them and sends back what
+ * the NPC says to that and the list.
  */
 final class DialogueScreen extends Screen {
 
@@ -113,7 +114,7 @@ final class DialogueScreen extends Screen {
 
     private void begin() {
         List<DialoguePayload.Entry> entries = talk.entries();
-        if (!entries.isEmpty() && entries.get(0).kind() != Dialogue.Kind.ACTIVE) {
+        if (!entries.isEmpty() && entries.get(0).kind().startsTalk()) {
             talkAbout(entries.get(0));
         } else {
             say(talk.greeting(), this::showList);
@@ -239,8 +240,9 @@ final class DialogueScreen extends Screen {
         QuestDoc.Quest q = shown.quest();
         int text = q.text().isEmpty() || shown.kind() != Dialogue.Kind.OFFER ? 0
                 : 4 + font.split(Component.literal(q.text()), cardW() - PAD * 2).size() * font.lineHeight;
-        return Math.min(height - 20, PAD * 2 + font.lineHeight + text
-                + card.height(font, q, shown.kind() == Dialogue.Kind.OFFER) + 10 + BUTTON_H);
+        int status = shown.kind() == Dialogue.Kind.WAITING ? 2 + font.lineHeight : 0;
+        return Math.min(height - 20, PAD * 2 + font.lineHeight + status + text
+                + card.height(font, q, shown.kind() == Dialogue.Kind.OFFER, shown.kind() != Dialogue.Kind.TAKE) + 10 + BUTTON_H);
     }
 
     private void rebuild() {
@@ -258,20 +260,25 @@ final class DialogueScreen extends Screen {
                     button("lorebench.dialogue.hand_in", x + PAD, y, half, () -> choose(DialogueChoicePayload.Action.HAND_IN));
                     button("lorebench.dialogue.later", x + PAD * 2 + half, y, half, this::showList);
                 }
-                case ACTIVE -> button("lorebench.dialogue.back", x + PAD, y, cardW() - PAD * 2, this::showList);
+                // The wait is over: taking the rewards is handing in again, the server knows which (0013).
+                case TAKE -> {
+                    button("lorebench.dialogue.take", x + PAD, y, half, () -> choose(DialogueChoicePayload.Action.HAND_IN));
+                    button("lorebench.dialogue.later", x + PAD * 2 + half, y, half, this::showList);
+                }
+                case ACTIVE, WAITING -> button("lorebench.dialogue.back", x + PAD, y, cardW() - PAD * 2, this::showList);
             }
         } else if (mode == Mode.LIST) {
             int x = boxX() + PAD;
             int y = boxY() + PAD;
             int w = boxW() - PAD * 2;
             for (DialoguePayload.Entry e : talk.entries()) {
-                boolean ready = e.kind() == Dialogue.Kind.READY;
+                boolean pending = e.kind() == Dialogue.Kind.ACTIVE || e.kind() == Dialogue.Kind.WAITING;
                 Component label = Component.literal(e.kind() == Dialogue.Kind.OFFER ? "! " : "? ")
-                        .withColor(e.kind() == Dialogue.Kind.ACTIVE ? GRAY : GOLD)
+                        .withColor(pending ? GRAY : GOLD)
                         .append(Component.literal(e.quest().title()).withColor(WHITE));
                 Button b = addRenderableWidget(Button.builder(label, btn -> talkAbout(e)).bounds(x, y, w, BUTTON_H).build());
-                // In progress with nothing to say: shown, but there is nothing to open (0009).
-                b.active = !waiting && (ready || e.kind() == Dialogue.Kind.OFFER || !e.lines().isEmpty());
+                // In progress or waiting with nothing to say: shown, but there is nothing to open (0009).
+                b.active = !waiting && (!pending || !e.lines().isEmpty());
                 y += BUTTON_H + 2;
             }
             button("lorebench.dialogue.goodbye", x, y, w, this::onClose);
@@ -383,6 +390,11 @@ final class DialogueScreen extends Screen {
         int ty = y + PAD;
         g.drawString(font, q.title(), x + PAD, ty, GOLD);
         ty += font.lineHeight;
+        if (shown.kind() == Dialogue.Kind.WAITING) {
+            ty += 2;
+            g.drawString(font, Component.translatable("lorebench.quests.waiting"), x + PAD, ty, LIGHT);
+            ty += font.lineHeight;
+        }
         g.enableScissor(x, ty, x + w, y + h - PAD - BUTTON_H - 4);
         if (shown.kind() == Dialogue.Kind.OFFER && !q.text().isEmpty()) {
             ty += 4;
@@ -392,10 +404,12 @@ final class DialogueScreen extends Screen {
             }
         }
         // An offer shows what accepting gives and what it will take ("× 10"); a quest in
-        // progress shows how far along it is.
+        // progress shows how far along it is. One handed in shows what was handed in ("× 10")
+        // while waiting, and only the rewards when they can be taken (0013).
         boolean offer = shown.kind() == Dialogue.Kind.OFFER;
-        ItemStack hovered = card.needsAndRewards(g, font, q, shown.progress(), !offer, offer,
-                x + PAD, ty, mouseX, mouseY);
+        boolean progress = shown.kind() == Dialogue.Kind.READY || shown.kind() == Dialogue.Kind.ACTIVE;
+        ItemStack hovered = card.needsAndRewards(g, font, q, shown.progress(), progress, offer,
+                shown.kind() != Dialogue.Kind.TAKE, x + PAD, ty, mouseX, mouseY);
         g.disableScissor();
         return hovered;
     }

@@ -76,6 +76,9 @@ public final class Quests {
     /** Goal conditions already read, by their text. Registries change only between server runs. */
     private final Map<String, Predicate<ItemStack>> conditions = new HashMap<>();
 
+    /** The day number last seen by {@link #onServerTick}, or -1 before the first tick. */
+    private long day = -1;
+
     public Quests(LorebenchRuntime runtime, RecordStore records) {
         this.runtime = runtime;
         this.records = records;
@@ -88,6 +91,7 @@ public final class Quests {
 
     public void start() {
         conditions.clear();
+        day = -1;
         current = this;
     }
 
@@ -97,15 +101,54 @@ public final class Quests {
         }
     }
 
+    /**
+     * The player's state of a quest. READY is worked out, never stored: an active quest whose
+     * goals are met right now, or a waiting one whose wait is over (0013).
+     */
     public QuestState state(ServerPlayer player, String questId) {
         Owner owner = Owner.player(player.getUUID());
         QuestState stored = QuestState.fromRecord(records.get(owner, questId));
         QuestDoc.Quest quest = runtime.quest(questId);
-        if (stored == QuestState.ACTIVE && quest != null
+        if (quest == null) {
+            return stored;
+        }
+        if (stored == QuestState.ACTIVE
                 && goalsMet(player.getInventory(), progress(owner, questId), quest, s -> condition(player, s))) {
             return QuestState.READY;
         }
+        if (stored == QuestState.WAITING && waitOver(owner, quest, today(player.server))) {
+            return QuestState.READY;
+        }
         return stored;
+    }
+
+    /** Whether the player has handed the quest's goals in and waits for, or can take, the rewards. */
+    public boolean handedIn(ServerPlayer player, String questId) {
+        return QuestState.fromRecord(records.get(Owner.player(player.getUUID()), questId)) == QuestState.WAITING;
+    }
+
+    private boolean waitOver(Owner owner, QuestDoc.Quest quest, long today) {
+        return QuestWaits.over(records.get(owner, QuestWaits.key(quest.id())), quest.waitDays(), today);
+    }
+
+    /** The game's day number now, as F3 shows it: it turns at 6:00 in the morning, and on waking up (0013). */
+    private static long today(MinecraftServer server) {
+        return QuestWaits.day(server.overworld().getDayTime());
+    }
+
+    /**
+     * Every server tick: when a new day starts (morning, waking up, {@code /time}), waits may be
+     * over, so everyone's quest screen hears of it.
+     */
+    public void onServerTick(MinecraftServer server) {
+        long today = today(server);
+        if (today != day) {
+            boolean first = day < 0;
+            day = today;
+            if (!first) {
+                syncAll(server);
+            }
+        }
     }
 
     /** What the player has done toward a quest's counted goals so far, by {@link QuestDoc.Goal#progressKey()}. */
@@ -248,9 +291,11 @@ public final class Quests {
     }
 
     /**
-     * Hand in a ready quest: take the goal items, give the rewards, and record it
-     * done (dropping its progress), all at once on the server thread. Rewards
-     * that do not fit drop at the player's feet (like {@code /give}).
+     * One step on with a ready quest, all at once on the server thread. Handing it in takes
+     * the goal items and drops its progress; then a quest with a wait records the day and
+     * waits (0013), any other gives the rewards and is done. A waiting quest whose wait is
+     * over gives the rewards and is done. Rewards that do not fit drop at the player's feet
+     * (like {@code /give}).
      *
      * @return false (and nothing changes) if the quest is not ready for this player
      */
@@ -259,20 +304,29 @@ public final class Quests {
         if (quest == null || state(player, questId) != QuestState.READY) {
             return false;
         }
-        Inventory inventory = player.getInventory();
-        for (QuestDoc.Goal goal : quest.goals()) {
-            if (goal.kind() == QuestDoc.Goal.Kind.ITEM) {
-                take(inventory, condition(player, goal.target()), goal.count());
-            } else if (goal.kind() == QuestDoc.Goal.Kind.COLLECT) {
-                take(inventory, QuestItems.of(goal, questId, player.getUUID()), goal.count());
+        Owner owner = Owner.player(player.getUUID());
+        if (!handedIn(player, questId)) {
+            Inventory inventory = player.getInventory();
+            for (QuestDoc.Goal goal : quest.goals()) {
+                if (goal.kind() == QuestDoc.Goal.Kind.ITEM) {
+                    take(inventory, condition(player, goal.target()), goal.count());
+                } else if (goal.kind() == QuestDoc.Goal.Kind.COLLECT) {
+                    take(inventory, QuestItems.of(goal, questId, player.getUUID()), goal.count());
+                }
+            }
+            records.set(owner, QuestProgress.key(questId), null);
+            if (quest.waitDays() > 0) {
+                records.set(owner, questId, QuestState.WAITING_VALUE);
+                records.set(owner, QuestWaits.key(questId), QuestWaits.write(today(player.server)));
+                sync(player);
+                return true;
             }
         }
         for (QuestDoc.Stack reward : quest.rewards()) {
             give(player, stack(reward.item(), player.registryAccess()), reward.count());
         }
-        Owner owner = Owner.player(player.getUUID());
         records.set(owner, questId, QuestState.DONE_VALUE);
-        records.set(owner, QuestProgress.key(questId), null);
+        records.set(owner, QuestWaits.key(questId), null);
         sync(player);
         return true;
     }
@@ -319,13 +373,14 @@ public final class Quests {
     /**
      * A player's standing on a quest, for the editor.
      *
-     * @param state    hidden (only turned it down so far), active, ready (online players only; it
-     *                 depends on their inventory) or done
+     * @param state    hidden (only turned it down so far), active, waiting, ready (the wait is over; or,
+     *                 online players only, their inventory has the goals) or done
      * @param progress their counted progress ({@link QuestDoc.Goal#progressKey()})
      * @param timesDeclined how many times they turned it down
+     * @param handedDay the day they handed it in to wait (0013), or -1
      */
     public record Standing(UUID player, String name, boolean online, QuestState state, Map<String, Integer> progress,
-                           int timesDeclined) {}
+                           int timesDeclined, long handedDay) {}
 
     /** Everyone who is on this quest, has done it or has turned it down, online or not, by name. Server thread. */
     public List<Standing> standings(MinecraftServer server, String questId) {
@@ -340,10 +395,21 @@ public final class Quests {
                 continue;
             }
             ServerPlayer online = server.getPlayerList().getPlayer(uuid);
-            QuestState state = online != null ? state(online, questId) : QuestState.fromRecord(records.peek(owner, questId));
+            String handed = records.peek(owner, QuestWaits.key(questId));
+            QuestState state;
+            if (online != null) {
+                state = state(online, questId);
+            } else {
+                state = QuestState.fromRecord(records.peek(owner, questId));
+                QuestDoc.Quest quest = runtime.quest(questId);
+                if (state == QuestState.WAITING && quest != null && QuestWaits.over(handed, quest.waitDays(), today(server))) {
+                    state = QuestState.READY;
+                }
+            }
             Map<String, Integer> progress = QuestProgress.read(records.peek(owner, QuestProgress.key(questId)));
             int declined = QuestDeclines.read(records.peek(owner, QuestDeclines.key(questId)));
-            out.add(new Standing(uuid, name(server, uuid, online), online != null, state, progress, declined));
+            out.add(new Standing(uuid, name(server, uuid, online), online != null, state, progress, declined,
+                    QuestWaits.read(handed)));
         }
         out.sort(Comparator.comparing(Standing::name, String.CASE_INSENSITIVE_ORDER));
         return out;
@@ -359,8 +425,8 @@ public final class Quests {
     }
 
     /**
-     * Take a player back to before a quest, online or not: no state, no progress and no
-     * refusals, so it is offered again as the first time and its supplies are given again on
+     * Take a player back to before a quest, online or not: no state, no progress, no
+     * refusals and no wait, so it is offered again as the first time and its supplies are given again on
      * accepting. What they were already given (supplies, rewards) stays theirs. Other quests
      * are left alone.
      */
@@ -369,6 +435,7 @@ public final class Quests {
         records.setAny(owner, questId, null);
         records.setAny(owner, QuestProgress.key(questId), null);
         records.setAny(owner, QuestDeclines.key(questId), null);
+        records.setAny(owner, QuestWaits.key(questId), null);
         ServerPlayer online = server.getPlayerList().getPlayer(uuid);
         if (online != null) {
             sync(online);
@@ -378,11 +445,15 @@ public final class Quests {
     /** Send the player every quest revealed to them, and nothing else. */
     public void sync(ServerPlayer player) {
         Owner owner = Owner.player(player.getUUID());
+        long today = today(player.server);
         List<QuestSyncPayload.Entry> revealed = new ArrayList<>();
         for (QuestDoc.Quest q : runtime.quests()) {
             QuestState s = QuestState.fromRecord(records.get(owner, q.id()));
+            if (s == QuestState.WAITING && waitOver(owner, q, today)) {
+                s = QuestState.READY; // the screen works out an active quest's "ready" from the inventory itself
+            }
             if (s != QuestState.HIDDEN) {
-                revealed.add(new QuestSyncPayload.Entry(q, s == QuestState.DONE, progress(owner, q.id())));
+                revealed.add(new QuestSyncPayload.Entry(q, s, progress(owner, q.id())));
             }
         }
         PacketDistributor.sendToPlayer(player, new QuestSyncPayload(List.copyOf(revealed)));

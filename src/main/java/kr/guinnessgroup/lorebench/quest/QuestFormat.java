@@ -41,10 +41,12 @@ import java.util.regex.Pattern;
  *                { "harvest": "minecraft:potatoes", "count": 5 }, { "breed": "minecraft:cow", "count": 2 },
  *                { "collect": "minecraft:amethyst_shard[custom_name='\"목걸이 조각\"']", "count": 3,
  *                  "from": "kill:minecraft:wolf", "chance": 0.5 } ],
+ *   "wait":    { "days": 1 },
  *   "rewards": [ { "item": "minecraft:emerald", "count": 5 } ] } ] }</pre>
  * {@code folders}, a folder's {@code parent}, and a quest's {@code icon}, {@code text}, {@code folder},
- * {@code giver}, {@code receiver}, {@code requires}, {@code lines} and {@code supplies} are optional (no parent or
- * folder = the top; see docs/decisions/0009-quest-workbench.md for the rest). Each of {@code lines} may
+ * {@code giver}, {@code receiver}, {@code requires}, {@code lines}, {@code supplies} and {@code wait} are optional (no
+ * parent or folder = the top, no wait = the rewards right away; see docs/decisions/0009-quest-workbench.md and
+ * 0013-waiting.md for the rest). Each of {@code lines} may
  * instead be groups picked by condition ({@link Speech}, 0012). Required quests, and quests the conditions
  * name, must exist, and requirements never lead back to the quest. Beyond that this checks only the shape; whether the items,
  * entities, crops and NPCs exist is checked on publish, where the game's lists are available.
@@ -124,12 +126,14 @@ public final class QuestFormat {
             String text = string(o, "text");
             String folder = Folders.placement(o, folders, where, errors);
             List<QuestDoc.Goal> goals = goals(o, where, errors);
+            int waitDays = waitDays(o.get("wait"), where, errors);
             List<QuestDoc.Stack> rewards = stacks(o, "rewards", ITEM_WITH_COMPONENTS, where, errors);
             List<QuestDoc.Stack> supplies = o.has("supplies")
                     ? stacks(o, "supplies", ITEM_WITH_COMPONENTS, where, errors) : List.of();
             QuestDoc.Flow flow = flow(o, where, errors);
             if (errors.size() == before) {
-                quests.add(new QuestDoc.Quest(id, title.trim(), icon, text == null ? "" : text, goals, rewards, supplies, folder, flow));
+                quests.add(new QuestDoc.Quest(id, title.trim(), icon, text == null ? "" : text, goals, waitDays, rewards,
+                        supplies, folder, flow));
             }
         }
         checkRequires(quests, ids, errors);
@@ -332,6 +336,25 @@ public final class QuestFormat {
         return List.copyOf(out);
     }
 
+    /**
+     * The wait between handing in and the rewards: {@code {"days": 1}}, in game days (0013), or 0
+     * when there is none. The unit is named so other kinds of wait can sit beside it later.
+     */
+    private static int waitDays(JsonElement e, String where, List<String> errors) {
+        if (e == null) {
+            return 0;
+        }
+        if (!e.isJsonObject() || !e.getAsJsonObject().keySet().equals(Set.of("days"))) {
+            errors.add(where + ": 'wait' must be like { \"days\": 1 }");
+            return 0;
+        }
+        int days = count(e.getAsJsonObject().get("days"));
+        if (days == 0) {
+            errors.add(where + ": wait days must be a whole number from 1 to " + MAX_COUNT);
+        }
+        return days;
+    }
+
     /** A whole number from 1 to {@link #MAX_COUNT}, or 0 if it is not one. */
     private static int count(JsonElement c) {
         if (c != null && c.isJsonPrimitive() && c.getAsJsonPrimitive().isNumber()) {
@@ -400,6 +423,11 @@ public final class QuestFormat {
                 goals.add(go);
             }
             o.add("goals", goals);
+            if (q.waitDays() > 0) {
+                JsonObject wait = new JsonObject();
+                wait.add("days", new JsonPrimitive(q.waitDays()));
+                o.add("wait", wait);
+            }
             o.add("rewards", writeStacks(q.rewards()));
             arr.add(o);
         }

@@ -147,7 +147,13 @@ function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goal
   )
 }
 
-const STATE_LABEL = { hidden: 'not taken', active: 'in progress', ready: 'ready to hand in', done: 'done' }
+const STATE_LABEL = { hidden: 'not taken', active: 'in progress', waiting: 'waiting', ready: 'ready to hand in', done: 'done' }
+
+// A player's state; one who handed in to wait (0013) says so, with the day.
+const stateText = (p) => {
+  if (p.handedDay === undefined) return STATE_LABEL[p.state] || p.state
+  return (p.state === 'ready' ? 'ready to take' : STATE_LABEL[p.state] || p.state) + ` · handed in on day ${p.handedDay}`
+}
 
 // Who is on this (published) quest, has done it or turned it down, online or not, and a
 // way to take one of them back to before it: offered again as the first time, supplies
@@ -170,7 +176,7 @@ function QuestPlayers({ quest, setMessage }) {
   }).join(' · ')
 
   const reset = async (p) => {
-    if (!window.confirm(`Take ${p.name} back to before "${quest.title}"?\n\nIt will be offered again as the first time (refusals forgotten), supplies are given again on accepting, and progress starts from 0. What they already got stays theirs.`)) return
+    if (!window.confirm(`Take ${p.name} back to before "${quest.title}"?\n\nIt will be offered again as the first time (refusals and any wait forgotten), supplies are given again on accepting, and progress starts from 0. What they already got stays theirs.`)) return
     try {
       const r = await fetch('/api/quest-reset', { method: 'POST', body: JSON.stringify({ quest: quest.id, player: p.uuid }) }).then((res) => res.json())
       setMessage(r.ok ? { ok: true, text: `${p.name} is back to before "${quest.title}".` } : { ok: false, text: r.error || 'Reset failed.' })
@@ -192,7 +198,7 @@ function QuestPlayers({ quest, setMessage }) {
           <div key={p.uuid} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
             <span style={{ flex: 1 }}>
               {p.name}{!p.online && <span style={hint}> (offline)</span>}
-              <span style={{ ...hint, marginLeft: 6 }}>{STATE_LABEL[p.state] || p.state}{p.state !== 'done' && counts(p.progress) ? ' · ' + counts(p.progress) : ''}{p.timesDeclined ? ` · declined ${p.timesDeclined}×` : ''}</span>
+              <span style={{ ...hint, marginLeft: 6 }}>{stateText(p)}{p.state !== 'done' && counts(p.progress) ? ' · ' + counts(p.progress) : ''}{p.timesDeclined ? ` · declined ${p.timesDeclined}×` : ''}</span>
             </span>
             <button onClick={() => reset(p)} style={{ cursor: 'pointer', color: '#c0392b' }}>Reset</button>
           </div>
@@ -267,6 +273,15 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
   }
 
   // Edit one field of the chosen quest; an emptied optional field is dropped.
+  // Game days between handing in and the rewards (0013): { days: n }, none when empty.
+  const setWait = (text) => {
+    setQuests((qs) => qs.map((q) => {
+      if (q.id !== quest.id) return q
+      const { wait, ...rest } = q
+      return text.trim() === '' ? rest : { ...rest, wait: { days: Number(text) } }
+    }))
+  }
+
   const setQuestField = (key, value) => {
     setQuests((qs) => qs.map((q) => {
       if (q.id !== quest.id) return q
@@ -433,6 +448,13 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                   Needs <span style={hint}>(all of them, in this order; kill, harvest and breed count only after accepting; collect items drop only while the quest is in progress, for that player only)</span>
                 </div>
                 <StackList goals fetchHeld={fetchHeld} lists={lists} stacks={quest.goals} onChange={(v) => setQuestField('goals', v)} />
+                <label style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 10 }}>
+                  <span>Wait</span>
+                  <input type="number" min="1" value={quest.wait?.days ?? ''} placeholder="none" onChange={(e) => setWait(e.target.value)}
+                    style={{ width: 60, padding: '3px 4px' }} />
+                  <span>days</span>
+                  <span style={hint}>(after Hand over; the rewards come once this many mornings pass, 6:00 or waking up. Empty = right away)</span>
+                </label>
                 <div style={{ marginBottom: 3 }}>Rewards <span style={hint}>(item as /give writes it; [components] allowed)</span></div>
                 <StackList wide fetchHeld={fetchHeld} stacks={quest.rewards} onChange={(v) => setQuestField('rewards', v)} />
               </Section>

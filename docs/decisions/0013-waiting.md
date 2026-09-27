@@ -50,7 +50,7 @@ handed_quest_k3f9x2ma = 12         (맡긴 날의 Day 숫자)
 
 | 칸 | 에디터 | 언제 |
 |---|---|---|
-| `handed` | After handing over | [건네기] 직후(`accepted`처럼). 없으면 창을 닫음 |
+| `handed` | After handing over | [건네기] 직후(`accepted`처럼). 없으면 곧바로 목록(기다리는 줄이 보임) |
 | `waiting` | While waiting | 기다리는 중에 받는 NPC에게 말 걸면. 없으면 목록에서 누를 수 없음(`active`와 같은 규칙) |
 | `ready` | When it's ready | 기다림이 끝나 [받기] 전. 없으면 바로 카드 |
 

@@ -183,8 +183,9 @@ public final class LorebenchWebServer {
     }
 
     /**
-     * {@code {"players": [{"uuid", "name", "online", "state": "active|ready|done", "progress": {...}}]}}:
-     * everyone on the quest or done with it, online or not.
+     * {@code {"players": [{"uuid", "name", "online", "state": "hidden|active|waiting|ready|done", "progress": {...},
+     * "timesDeclined", "handedDay"}]}}: everyone on the quest, done with it or who turned it down, online or not.
+     * {@code handedDay} only while they wait (0013).
      */
     private static String questPlayers(MinecraftServer mc, String questId) {
         Quests quests = Quests.current();
@@ -202,6 +203,9 @@ public final class LorebenchWebServer {
             s.progress().forEach(progress::addProperty);
             p.add("progress", progress);
             p.addProperty("timesDeclined", s.timesDeclined());
+            if (s.handedDay() >= 0) {
+                p.addProperty("handedDay", s.handedDay());
+            }
             list.add(p);
         }
         JsonObject o = new JsonObject();

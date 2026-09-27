@@ -6,6 +6,7 @@
 package kr.guinnessgroup.lorebench.client;
 
 import kr.guinnessgroup.lorebench.quest.QuestDoc;
+import kr.guinnessgroup.lorebench.quest.QuestState;
 import kr.guinnessgroup.lorebench.quest.QuestSyncPayload;
 import kr.guinnessgroup.lorebench.quest.Quests;
 import net.minecraft.client.gui.GuiGraphics;
@@ -120,7 +121,7 @@ public final class QuestScreen extends Screen {
             }
             g.renderItem(card.icon(e.quest()), x0 + 2, y + 2);
             String name = font.plainSubstrByWidth(e.quest().title(), LIST_W - 24);
-            g.drawString(font, name, x0 + 22, y + (ROW_H - font.lineHeight) / 2 + 1, e.done() ? GRAY : WHITE);
+            g.drawString(font, name, x0 + 22, y + (ROW_H - font.lineHeight) / 2 + 1, e.state() == QuestState.DONE ? GRAY : WHITE);
             y += ROW_H;
         }
         g.disableScissor();
@@ -132,17 +133,21 @@ public final class QuestScreen extends Screen {
         int dx = divider + PAD + 1;
         int dw = left + panelW - PAD - dx;
         int bottom = top + panelH - PAD;
-        boolean ready = !selected.done() && player != null
-                && Quests.goalsMet(player.getInventory(), selected.progress(), q, card::condition);
+        // Only an active quest shows progress: one handed in shows what was handed in ("× 10").
+        boolean active = selected.state() == QuestState.ACTIVE && player != null;
+        Component status = switch (selected.state()) {
+            case DONE -> Component.translatable("lorebench.quests.done").withColor(GREEN);
+            case WAITING -> Component.translatable("lorebench.quests.waiting").withColor(LIGHT); // no days left shown (0013)
+            case READY -> Component.translatable("lorebench.quests.take").withColor(GREEN);
+            default -> active && Quests.goalsMet(player.getInventory(), selected.progress(), q, card::condition)
+                    ? Component.translatable("lorebench.quests.ready").withColor(GREEN) : null;
+        };
         y = listTop();
         g.enableScissor(dx, y, dx + dw, bottom);
         g.drawString(font, q.title(), dx, y, GOLD);
         y += font.lineHeight + 2;
-        if (selected.done()) {
-            g.drawString(font, Component.translatable("lorebench.quests.done"), dx, y, GREEN);
-            y += font.lineHeight + 2;
-        } else if (ready) {
-            g.drawString(font, Component.translatable("lorebench.quests.ready"), dx, y, GREEN);
+        if (status != null) {
+            g.drawString(font, status, dx, y, WHITE);
             y += font.lineHeight + 2;
         }
         if (!q.text().isEmpty()) {
@@ -152,8 +157,8 @@ public final class QuestScreen extends Screen {
                 y += font.lineHeight;
             }
         }
-        ItemStack hovered = card.needsAndRewards(g, font, q, selected.progress(), !selected.done() && player != null,
-                false, dx, y, mouseX, mouseY);
+        ItemStack hovered = card.needsAndRewards(g, font, q, selected.progress(), active, false, true,
+                dx, y, mouseX, mouseY);
         g.disableScissor();
         if (!hovered.isEmpty()) {
             g.renderTooltip(font, hovered, mouseX, mouseY);

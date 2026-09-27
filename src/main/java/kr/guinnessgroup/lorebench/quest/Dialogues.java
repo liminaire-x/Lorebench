@@ -17,9 +17,11 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -96,9 +98,11 @@ public final class Dialogues {
             talks.remove(player.getUUID());
             return;
         }
-        Dialogue.Kind needed = choice.action() == DialogueChoicePayload.Action.HAND_IN ? Dialogue.Kind.READY : Dialogue.Kind.OFFER;
+        // Handing in also takes the rewards of a quest whose wait is over (0013).
+        Set<Dialogue.Kind> needed = choice.action() == DialogueChoicePayload.Action.HAND_IN
+                ? EnumSet.of(Dialogue.Kind.READY, Dialogue.Kind.TAKE) : EnumSet.of(Dialogue.Kind.OFFER);
         boolean allowed = plan(player, def.id()).stream()
-                .anyMatch(e -> e.kind() == needed && e.quest().id().equals(choice.questId()));
+                .anyMatch(e -> needed.contains(e.kind()) && e.quest().id().equals(choice.questId()));
         List<DialogueLines.Line> said = List.of();
         String questId = choice.questId();
         if (!allowed) {
@@ -126,7 +130,7 @@ public final class Dialogues {
     }
 
     private List<Dialogue.Entry> plan(ServerPlayer player, String npcId) {
-        return Dialogue.plan(npcId, runtime.quests(), id -> quests.state(player, id));
+        return Dialogue.plan(npcId, runtime.quests(), id -> quests.state(player, id), id -> quests.handedIn(player, id));
     }
 
     /**
