@@ -13,7 +13,7 @@
    유닛 테스트에서 마인크래프트 NBT(`CompoundTag`·`NbtUtils`)는 게임 부트스트랩 없이 쓸 수 있다(예: `QuestItemsTest`).
    `ItemStack`처럼 레지스트리가 필요한 것은 안 되니, 비싼 규칙은 NBT·글자만 다루는 순수 함수로 떼어 테스트한다.
 5. **기록**: 비싼 결정은 `decisions/`, 개념은 `map.md`, 이야기는 `stories.md`, 상태는 `roadmap.md`, 코드 구조는 `CLAUDE.md`.
-6. **로컬 검증**: 에디터는 `npm run build` 뒤 **가짜 API 서버**로 눌러 본다: `.venv/Scripts/python.exe tools/mock_server.py`
+6. **로컬 검증**: 에디터는 `npm run build` 뒤 **가짜 API 서버**로 눌러 본다: `<Python 3.14> tools/mock_server.py`(경로는 CLAUDE.md "Python")
    → `http://127.0.0.1:5174`(게임 없이 `editor/dist/index.html`과 고정 응답, publish 본문은 `build/mock/`에 저장).
    Java는 에이전트 환경에서 컴파일하지 않는다.
 7. **커밋**: 코드와 문서를 나눠 커밋. conventional commits(영어) + 공동 작성자 Claude 줄.
