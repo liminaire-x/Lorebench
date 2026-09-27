@@ -97,15 +97,16 @@ public final class NpcFormat {
                 errors.add("duplicate NPC id '" + id + "'");
                 continue;
             }
+            String where = Ids.named("NPC", id, name);
             String model = optional(o, "model");
             String idle = optional(o, "idle");
             if (!model.isEmpty() && !MODEL.matcher(model).matches()) {
-                errors.add("NPC '" + id + "': model '" + model + "' must use a-z, 0-9, _");
+                errors.add(where + ": model '" + model + "' must use a-z, 0-9, _");
                 continue;
             }
-            String folder = Folders.placement(o, folders, "NPC '" + id + "'", errors);
-            List<DialogueLines.Line> greeting = DialogueLines.read(o.get("greeting"), "NPC '" + id + "' greeting", errors);
-            NpcDoc.Talk talk = readTalk(o.get("talk"), "NPC '" + id + "'", errors);
+            String folder = Folders.placement(o, folders, where, errors);
+            List<DialogueLines.Line> greeting = DialogueLines.read(o.get("greeting"), where + " greeting", errors);
+            NpcDoc.Talk talk = readTalk(o.get("talk"), where, errors);
             npcs.add(new NpcDoc.NpcDef(id, name, model, idle, folder, greeting, talk));
         }
         if (!errors.isEmpty()) {

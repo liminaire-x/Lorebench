@@ -72,13 +72,13 @@ public final class Folders {
         }
         for (Folder f : byId.values()) {
             if (!f.parent().isEmpty() && !byId.containsKey(f.parent())) {
-                errors.add(doc + ": folder '" + f.id() + "': parent '" + f.parent() + "' does not exist");
+                errors.add(doc + ": " + Ids.named("folder", f.id(), f.name()) + ": parent '" + f.parent() + "' does not exist");
                 continue;
             }
             Set<String> seen = new HashSet<>();
             for (String at = f.id(); !at.isEmpty() && byId.containsKey(at); at = byId.get(at).parent()) {
                 if (!seen.add(at)) {
-                    errors.add(doc + ": folder '" + f.id() + "' ends up inside itself");
+                    errors.add(doc + ": " + Ids.named("folder", f.id(), f.name()) + " ends up inside itself");
                     break;
                 }
             }

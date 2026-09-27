@@ -10,6 +10,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.logging.LogUtils;
 import kr.guinnessgroup.lorebench.DocumentException;
+import kr.guinnessgroup.lorebench.Ids;
 import kr.guinnessgroup.lorebench.graph.GraphDoc;
 import kr.guinnessgroup.lorebench.graph.GraphFormat;
 import kr.guinnessgroup.lorebench.npc.NpcDoc;
@@ -158,7 +159,7 @@ public final class LorebenchRuntime {
     private void checkItems(QuestDoc questDoc) {
         List<String> errors = new ArrayList<>();
         for (QuestDoc.Quest q : questDoc.quests()) {
-            String where = "quest '" + q.title() + "' (" + q.id() + "): ";
+            String where = Ids.named("quest", q.id(), q.title()) + ": ";
             if (!q.icon().isEmpty()) {
                 check(errors, where + "icon '" + q.icon() + "': ", checks.item(q.icon()));
             }

@@ -35,4 +35,14 @@ public final class Ids {
     public static String rule(String kind) {
         return "must look like " + kind + "_ followed by a-z, 0-9";
     }
+
+    /**
+     * Names a thing in error messages the way the author knows it, e.g.
+     * "quest '늑대 사냥' (quest_nj46mr8g)", or "quest 'quest_nj46mr8g'" while it has no name.
+     */
+    public static String named(String label, String id, String name) {
+        return name == null || name.isBlank()
+                ? label + " '" + id + "'"
+                : label + " '" + name.trim() + "' (" + id + ")";
+    }
 }

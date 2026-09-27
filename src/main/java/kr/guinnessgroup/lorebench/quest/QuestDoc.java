@@ -7,6 +7,7 @@ package kr.guinnessgroup.lorebench.quest;
 
 import kr.guinnessgroup.lorebench.DialogueLines.Line;
 import kr.guinnessgroup.lorebench.Folders.Folder;
+import kr.guinnessgroup.lorebench.Ids;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -141,7 +142,7 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
         for (Quest q : quests) {
             for (String npc : List.of(q.flow().giver(), q.flow().receiver())) {
                 if (!npc.isEmpty() && !npcIds.contains(npc)) {
-                    errors.add("quest '" + q.title() + "' (" + q.id() + "): NPC '" + npc + "' does not exist");
+                    errors.add(Ids.named("quest", q.id(), q.title()) + ": NPC '" + npc + "' does not exist");
                 }
             }
         }

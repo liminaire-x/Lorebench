@@ -7,6 +7,7 @@ package kr.guinnessgroup.lorebench.runtime;
 
 import kr.guinnessgroup.lorebench.graph.GraphDoc;
 import kr.guinnessgroup.lorebench.DocumentException;
+import kr.guinnessgroup.lorebench.Ids;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,7 +37,7 @@ public final class GraphBuilder {
     }
 
     private static Graph buildGraph(GraphDoc.DocGraph g, NodeRegistry registry, Catalog catalog, List<String> errors) {
-        String where = "graph '" + g.id() + "'";
+        String where = Ids.named("graph", g.id(), g.name());
 
         Map<String, NodeType> typeOf = new HashMap<>();
         Map<String, Node> runnable = new HashMap<>();

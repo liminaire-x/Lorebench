@@ -95,8 +95,8 @@ public final class GraphFormat {
             errors.add("graph id " + (id == null ? "is missing" : "'" + id + "' " + Ids.rule(Ids.GRAPH)));
             return null;
         }
-        String where = "graph '" + id + "'";
         String name = string(o, "name");
+        String where = Ids.named("graph", id, name);
         if (name == null || name.isBlank()) {
             errors.add(where + ": missing 'name'");
         }

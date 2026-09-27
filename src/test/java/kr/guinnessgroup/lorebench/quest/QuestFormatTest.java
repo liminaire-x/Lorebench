@@ -130,6 +130,21 @@ class QuestFormatTest {
     }
 
     @Test
+    void messagesNameAQuestByItsTitle() {
+        DocumentException e = assertThrows(DocumentException.class, () -> QuestFormat.read("""
+                { "format": 1, "quests": [
+                  { "id": "quest_a", "title": "늑대 사냥", "requires": [ "quest_b" ], "goals": [], "rewards": [] },
+                  { "id": "quest_b", "title": " ", "requires": [ "quest_a" ], "goals": [], "rewards": [] } ] }
+                """));
+        assertTrue(e.errors().contains("quest 'quest_b': missing 'title'"), e.errors().toString());
+        e = assertThrows(DocumentException.class, () -> QuestFormat.read("""
+                { "format": 1, "quests": [
+                  { "id": "quest_a", "title": "늑대 사냥", "requires": [ "quest_a" ], "goals": [], "rewards": [] } ] }
+                """));
+        assertEquals(List.of("quest '늑대 사냥' (quest_a) requires itself"), e.errors());
+    }
+
+    @Test
     void giversAreNpcIdsAndLinesAreText() {
         for (String part : new String[] {
                 "\"giver\": \"chief\"",                                   // not an NPC id

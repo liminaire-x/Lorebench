@@ -105,12 +105,12 @@ public final class QuestFormat {
                 errors.add("quest id " + (id == null ? "is missing" : "'" + id + "' " + Ids.rule(Ids.QUEST)));
                 continue;
             }
-            String where = "quest '" + id + "'";
+            String title = string(o, "title");
+            String where = Ids.named("quest", id, title);
             int before = errors.size();
             if (!ids.add(id)) {
                 errors.add("duplicate quest id '" + id + "'");
             }
-            String title = string(o, "title");
             if (title == null || title.isBlank()) {
                 errors.add(where + ": missing 'title'");
             }
@@ -199,17 +199,18 @@ public final class QuestFormat {
         Map<String, List<String>> requires = new HashMap<>();
         for (QuestDoc.Quest q : quests) {
             requires.put(q.id(), q.flow().requires());
+            String where = Ids.named("quest", q.id(), q.title());
             for (String r : q.flow().requires()) {
                 if (r.equals(q.id())) {
-                    errors.add("quest '" + q.id() + "' requires itself");
+                    errors.add(where + " requires itself");
                 } else if (!ids.contains(r)) {
-                    errors.add("quest '" + q.id() + "' requires quest '" + r + "' that does not exist");
+                    errors.add(where + " requires quest '" + r + "' that does not exist");
                 }
             }
         }
         for (QuestDoc.Quest q : quests) {
             if (!q.flow().requires().contains(q.id()) && leadsBack(q.id(), requires)) {
-                errors.add("quest '" + q.id() + "' ends up requiring itself");
+                errors.add(Ids.named("quest", q.id(), q.title()) + " ends up requiring itself");
             }
         }
     }
