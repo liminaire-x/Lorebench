@@ -139,6 +139,15 @@ public class NpcEntity extends PathfinderMob implements GeoEntity {
         talkWanted = talking;
     }
 
+    /**
+     * Client: the talk opened and its start is still to play or playing, so the first line
+     * waits (0011). Moves on only while this NPC is animated, i.e. drawn with its model.
+     */
+    public boolean isStartingTalk() {
+        return talkWanted && talkPhase != TalkPhase.LOOP
+                && (talkPhase == TalkPhase.START || !entityData.get(TALK_START).isEmpty());
+    }
+
     @Override
     public void tick() {
         super.tick();
