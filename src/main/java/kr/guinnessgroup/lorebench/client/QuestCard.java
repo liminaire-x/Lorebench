@@ -89,6 +89,7 @@ final class QuestCard {
                     case HARVEST -> cropName(goal.target());
                     case ITEM -> goal.target().startsWith("#") ? Component.literal(goal.target()) // a tag: any item in it
                             : icon.getHoverName();
+                    case COLLECT -> icon.getHoverName();
                 };
                 if (goal.kind().counted()) {
                     // "Kill Cow" and "Breed Cow" can sit in one quest; say which.
@@ -100,9 +101,7 @@ final class QuestCard {
                     amount = " × " + goal.count();
                     color = WHITE;
                 } else {
-                    int have = goal.kind().counted()
-                            ? progress.getOrDefault(goal.progressKey(), 0)
-                            : Quests.count(player.getInventory(), condition(goal.target()));
+                    int have = Quests.have(player.getInventory(), progress, q, goal, this::condition);
                     amount = " " + Math.min(have, goal.count()) + "/" + goal.count();
                     color = have >= goal.count() ? GREEN : WHITE;
                 }
@@ -139,14 +138,16 @@ final class QuestCard {
 
     /**
      * An item goal shows the item its condition names (with a name or enchantments if
-     * it lists them); a kill or breed goal shows the mob's spawn egg, if it has one; a harvest
-     * goal shows what picking the crop gives (wheat seeds, a potato, cocoa beans ...).
+     * it lists them); a quest item goal, the item as it drops; a kill or breed goal shows the
+     * mob's spawn egg, if it has one; a harvest goal shows what picking the crop gives (wheat
+     * seeds, a potato, cocoa beans ...).
      */
     private ItemStack goalIcon(QuestDoc.Goal goal) {
         return switch (goal.kind()) {
             case ITEM -> displays.computeIfAbsent(goal.target(), s -> minecraft.player == null
                     ? ItemStack.EMPTY
                     : Quests.display(s, minecraft.player.registryAccess()));
+            case COLLECT -> rewardStack(goal.target());
             case KILL, BREED -> {
                 SpawnEggItem egg = SpawnEggItem.byId(Quests.entityType(goal.target()));
                 yield egg == null ? ItemStack.EMPTY : new ItemStack(egg);

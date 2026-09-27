@@ -36,7 +36,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // Handled on the client's main thread (the registrar's default).
-        event.registrar("3").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
+        event.registrar("4").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
     }
 
     @Override

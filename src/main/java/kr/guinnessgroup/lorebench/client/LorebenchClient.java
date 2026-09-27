@@ -7,8 +7,12 @@ package kr.guinnessgroup.lorebench.client;
 
 import kr.guinnessgroup.lorebench.npc.LorebenchEntities;
 import kr.guinnessgroup.lorebench.quest.DialoguePayload;
+import kr.guinnessgroup.lorebench.quest.QuestItemEntity;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.ItemEntityRenderer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -37,6 +41,13 @@ public final class LorebenchClient {
 
     private static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(LorebenchEntities.NPC.get(), NpcRenderer::new);
+        // A quest item is drawn like any dropped item.
+        event.registerEntityRenderer(LorebenchEntities.QUEST_ITEM.get(), LorebenchClient::questItemRenderer);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static EntityRenderer<QuestItemEntity> questItemRenderer(EntityRendererProvider.Context context) {
+        return (EntityRenderer<QuestItemEntity>) (EntityRenderer<?>) new ItemEntityRenderer(context);
     }
 
     private static void onRegisterKeys(RegisterKeyMappingsEvent event) {

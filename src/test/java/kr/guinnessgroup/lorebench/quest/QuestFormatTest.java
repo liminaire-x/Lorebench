@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -303,6 +304,44 @@ class QuestFormatTest {
         String written = QuestFormat.write(doc);
         assertTrue(written.contains("\"breed\": \"minecraft:cow\""), written);
         assertEquals(doc, QuestFormat.read(written));
+    }
+
+    @Test
+    void collectGoalsNameAnItemWhereItDropsAndHowOften() {
+        QuestDoc doc = QuestFormat.read("""
+                { "format": 1, "quests": [ { "id": "quest_necklace", "title": "목걸이 찾기",
+                  "goals": [ { "collect": "minecraft:amethyst_shard[custom_name='\\"목걸이 조각\\"']", "count": 3,
+                               "from": "kill:minecraft:wolf", "chance": 0.5 },
+                             { "collect": "minecraft:paper", "count": 1, "from": "kill:minecraft:zombie" },
+                             { "kill": "minecraft:wolf", "count": 1 } ],
+                  "rewards": [] } ] }
+                """);
+        List<QuestDoc.Goal> goals = doc.find("quest_necklace").goals();
+        assertEquals(QuestDoc.Goal.collect("minecraft:amethyst_shard[custom_name='\"목걸이 조각\"']", 3,
+                "kill:minecraft:wolf", 0.5), goals.get(0));
+        assertEquals("minecraft:amethyst_shard", goals.get(0).itemId());
+        assertEquals(1.0, goals.get(1).chance()); // no chance = every time
+        assertFalse(goals.get(0).kind().counted()); // counted from the inventory, not the progress record
+        String written = QuestFormat.write(doc);
+        assertTrue(written.contains("\"from\": \"kill:minecraft:wolf\""), written);
+        assertTrue(written.contains("\"chance\": 0.5"), written);
+        assertEquals(1, written.split("\"chance\"", -1).length - 1, written); // 1 is left out
+        assertEquals(doc, QuestFormat.read(written));
+        for (String bad : new String[] {
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1 }",                                        // no from
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"minecraft:wolf\" }",           // no kind
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"harvest:minecraft:wheat\" }",  // kills only
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\", \"chance\": 0 }",
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\", \"chance\": 1.5 }",
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\", \"chance\": \"half\" }",
+                "{ \"collect\": \"paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\" }",                // not an item
+                "{ \"kill\": \"minecraft:wolf\", \"count\": 1, \"from\": \"kill:minecraft:wolf\" }",         // not a collect goal
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\" },"
+                        + "{ \"collect\": \"minecraft:paper[custom_name='\\\"편지\\\"']\", \"count\": 1, \"from\": \"kill:minecraft:zombie\" }"}) {
+            assertThrows(DocumentException.class, () -> QuestFormat.read(
+                    "{\"format\":1,\"quests\":[{\"id\":\"quest_a\",\"title\":\"A\",\"goals\":[" + bad + "],\"rewards\":[]}]}"),
+                    bad);
+        }
     }
 
     @Test

@@ -91,17 +91,27 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      * active, counted in their progress record: {@code {"kill": "minecraft:wolf", "count": 3}}
      * (an entity type id), {@code {"harvest": "minecraft:wheat", "count": 10}} (a crop
      * block id; fully grown ones, one per plant) or {@code {"breed": "minecraft:cow", "count": 2}}
-     * (an entity type id; babies born). See docs/decisions/0010-farming-goals.md.
+     * (an entity type id; babies born). See docs/decisions/0010-farming-goals.md. Or a
+     * quest item that drops only for the player on the quest:
+     * {@code {"collect": "minecraft:amethyst_shard[...]", "count": 3, "from": "kill:minecraft:wolf", "chance": 0.5}}
+     * (an item as {@code /give} writes it; see docs/decisions/0012-lost-necklace.md).
      *
-     * @param target an item condition, an entity type id or a block id, depending on {@code kind}
+     * @param target an item condition, an entity type id, a block id or an item, depending on {@code kind}
+     * @param from   a collect goal's source, {@code <kind>:<target>} like a progress key ({@code kill:minecraft:wolf}); else ""
+     * @param chance a collect goal's chance to drop per source, above 0 up to 1; else 1
      */
-    public record Goal(Kind kind, String target, int count) {
+    public record Goal(Kind kind, String target, int count, String from, double chance) {
+
+        public Goal(Kind kind, String target, int count) {
+            this(kind, target, count, "", 1);
+        }
 
         public enum Kind {
             ITEM("item"),
             KILL("kill"),
             HARVEST("harvest"),
-            BREED("breed");
+            BREED("breed"),
+            COLLECT("collect");
 
             /** The key that names the target in the saved goal and in progress records. Never rename. */
             public final String key;
@@ -112,7 +122,7 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
 
             /** Whether this goal counts something the player does (kept in their progress record). */
             public boolean counted() {
-                return this != ITEM;
+                return this != ITEM && this != COLLECT;
             }
         }
 
@@ -130,6 +140,16 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
 
         public static Goal breed(String entity, int count) {
             return new Goal(Kind.BREED, entity, count);
+        }
+
+        public static Goal collect(String item, int count, String from, double chance) {
+            return new Goal(Kind.COLLECT, item, count, from, chance);
+        }
+
+        /** The id a collect goal's item has, without components: {@code minecraft:amethyst_shard}. */
+        public String itemId() {
+            int bracket = target.indexOf('[');
+            return bracket < 0 ? target : target.substring(0, bracket);
         }
 
         /** Where a counted goal's count is kept in the progress record, e.g. {@code kill:minecraft:wolf}. */

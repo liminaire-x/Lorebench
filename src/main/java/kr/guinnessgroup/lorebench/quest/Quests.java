@@ -123,14 +123,43 @@ public final class Quests {
 
     /**
      * A player killed something: count it toward their active kill goals for that
-     * entity. Tamed animals (someone's pet wolf, cat, parrot, horse ...) never count.
+     * entity, and maybe drop quest items for them. Tamed animals (someone's pet wolf,
+     * cat, parrot, horse ...) never count.
      */
     public void onKill(ServerPlayer player, LivingEntity victim) {
         if ((victim instanceof TamableAnimal pet && pet.isTame())
                 || (victim instanceof AbstractHorse horse && horse.isTamed())) {
             return;
         }
-        tally(player, QuestDoc.Goal.Kind.KILL, BuiltInRegistries.ENTITY_TYPE.getKey(victim.getType()).toString());
+        String entity = BuiltInRegistries.ENTITY_TYPE.getKey(victim.getType()).toString();
+        tally(player, QuestDoc.Goal.Kind.KILL, entity);
+        dropQuestItems(player, victim, QuestDoc.Goal.progressKey(QuestDoc.Goal.Kind.KILL, entity));
+    }
+
+    /**
+     * For each active quest of the player's with a collect goal from {@code from}, by its
+     * chance: one of its items, marked for them, drops where {@code source} was, seen and
+     * picked up by them only. None while they already carry enough (0012).
+     */
+    private void dropQuestItems(ServerPlayer player, Entity source, String from) {
+        Owner owner = Owner.player(player.getUUID());
+        for (QuestDoc.Quest q : runtime.quests()) {
+            if (QuestState.fromRecord(records.get(owner, q.id())) != QuestState.ACTIVE) {
+                continue;
+            }
+            for (QuestDoc.Goal goal : q.goals()) {
+                if (goal.kind() != QuestDoc.Goal.Kind.COLLECT || !goal.from().equals(from)
+                        || count(player.getInventory(), QuestItems.of(goal, q.id(), player.getUUID())) >= goal.count()
+                        || player.getRandom().nextDouble() >= goal.chance()) {
+                    continue;
+                }
+                ItemStack stack = stack(goal.target(), player.registryAccess());
+                if (!stack.isEmpty()) {
+                    QuestItems.mark(stack, q.id(), player.getUUID());
+                    QuestItemEntity.drop(player.serverLevel(), source, stack, player.getUUID());
+                }
+            }
+        }
     }
 
     /**
@@ -234,6 +263,8 @@ public final class Quests {
         for (QuestDoc.Goal goal : quest.goals()) {
             if (goal.kind() == QuestDoc.Goal.Kind.ITEM) {
                 take(inventory, condition(player, goal.target()), goal.count());
+            } else if (goal.kind() == QuestDoc.Goal.Kind.COLLECT) {
+                take(inventory, QuestItems.of(goal, questId, player.getUUID()), goal.count());
             }
         }
         for (QuestDoc.Stack reward : quest.rewards()) {
@@ -373,14 +404,29 @@ public final class Quests {
     public static boolean goalsMet(Inventory inventory, Map<String, Integer> progress, QuestDoc.Quest quest,
                                    Function<String, Predicate<ItemStack>> condition) {
         for (QuestDoc.Goal goal : quest.goals()) {
-            int have = goal.kind().counted()
-                    ? progress.getOrDefault(goal.progressKey(), 0)
-                    : count(inventory, condition.apply(goal.target()));
-            if (have < goal.count()) {
+            if (have(inventory, progress, quest, goal, condition) < goal.count()) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * How far along one goal is: hand-in items and the quest's own items (marked for
+     * this inventory's player) in the inventory, counted goals in {@code progress}.
+     */
+    public static int have(Inventory inventory, Map<String, Integer> progress, QuestDoc.Quest quest, QuestDoc.Goal goal,
+                           Function<String, Predicate<ItemStack>> condition) {
+        return switch (goal.kind()) {
+            case ITEM -> count(inventory, condition.apply(goal.target()));
+            case COLLECT -> count(inventory, QuestItems.of(goal, quest.id(), inventory.player.getUUID()));
+            case KILL, HARVEST, BREED -> progress.getOrDefault(goal.progressKey(), 0);
+        };
+    }
+
+    /** An item's id without components, e.g. {@code minecraft:amethyst_shard}. */
+    public static String itemId(ItemStack stack) {
+        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
     }
 
     // --- items and entities, read the way the game's commands read them ---

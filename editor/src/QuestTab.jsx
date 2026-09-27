@@ -14,6 +14,7 @@ const GOAL_KINDS = [
   { key: 'kill', label: 'kill', placeholder: 'minecraft:wolf' },
   { key: 'harvest', label: 'harvest', placeholder: 'minecraft:wheat', list: 'crops', choose: 'Choose a crop…' },
   { key: 'breed', label: 'breed', placeholder: 'minecraft:cow', list: 'animals', choose: 'Choose an animal…' },
+  { key: 'collect', label: 'collect (drops)', placeholder: "minecraft:amethyst_shard[custom_name='\"목걸이 조각\"']" },
 ]
 
 // A harvest goal's crop or a breed goal's animal: picked from the game's list
@@ -59,15 +60,57 @@ function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goal
         if (goals) {
           // A goal is { item, count } (hand in), or something done while active:
           // { kill, count }, { harvest, count } (fully grown crops, one per plant) or
-          // { breed, count } (babies born to animals the player fed).
+          // { breed, count } (babies born to animals the player fed), or a quest item
+          // { collect, count, from, chance } that drops only for the player on the quest (0012).
           const kindDef = GOAL_KINDS.find((k) => s[k.key] !== undefined) || GOAL_KINDS[0]
           const kind = kindDef.key
-          const setKind = (k) => onChange(stacks.map((x, j) => (j === i ? { [k]: x[kind], count: x.count } : x)))
+          const setKind = (k) => onChange(stacks.map((x, j) => (j === i
+            ? { [k]: x[kind], count: x.count, ...(k === 'collect' ? { from: 'kill:' } : {}) } : x)))
+          const kindSelect = (
+            <select value={kind} onChange={(e) => setKind(e.target.value)} style={{ padding: '4px 2px' }}>
+              {GOAL_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+            </select>
+          )
+          if (kind === 'collect') {
+            const mob = (s.from || '').replace(/^kill:/, '')
+            const percent = s.chance === undefined ? '' : Math.round(s.chance * 1000) / 10
+            const setChance = (v) => onChange(stacks.map((x, j) => {
+              if (j !== i) return x
+              const { chance, ...rest } = x
+              const n = Number(v)
+              return v === '' || n >= 100 ? rest : { ...rest, chance: n / 100 }
+            }))
+            return (
+              <div key={i} style={{ marginBottom: 6, borderLeft: '2px solid #e5e7eb', paddingLeft: 6 }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 3 }}>
+                  {kindSelect}
+                  <textarea
+                    value={s.collect} rows={1} placeholder={kindDef.placeholder}
+                    title="The item as /give writes it. It drops only for players on this quest, marked as theirs."
+                    onChange={(e) => set(i, 'collect', e.target.value)}
+                    style={{ ...input, flex: 1, resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }}
+                  />
+                  {held('collect')}
+                </div>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12 }}>
+                  drops when they kill
+                  <input
+                    value={mob} placeholder="minecraft:wolf"
+                    onChange={(e) => set(i, 'from', 'kill:' + e.target.value.trim())} style={{ ...input, flex: 1 }}
+                  />
+                  <input
+                    type="number" min={1} max={100} value={percent} placeholder="100"
+                    title="Chance per kill, in percent (empty = every time)"
+                    onChange={(e) => setChance(e.target.value)} style={{ ...input, width: 60 }}
+                  />%
+                  {count}{remove}
+                </div>
+              </div>
+            )
+          }
           return (
             <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 3 }}>
-              <select value={kind} onChange={(e) => setKind(e.target.value)} style={{ padding: '4px 2px' }}>
-                {GOAL_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
-              </select>
+              {kindSelect}
               {kindDef.list ? (
                 <ListPicker
                   value={s[kind]} options={lists[kindDef.list] || []} placeholder={kindDef.placeholder}
@@ -387,7 +430,7 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                 </div>
                 <StackList wide fetchHeld={fetchHeld} stacks={quest.supplies || []} onChange={(v) => setQuestField('supplies', v)} />
                 <div style={{ marginBottom: 3 }}>
-                  Needs <span style={hint}>(all of them, in this order; kill, harvest and breed count only after accepting)</span>
+                  Needs <span style={hint}>(all of them, in this order; kill, harvest and breed count only after accepting; collect items drop only while the quest is in progress, for that player only)</span>
                 </div>
                 <StackList goals fetchHeld={fetchHeld} lists={lists} stacks={quest.goals} onChange={(v) => setQuestField('goals', v)} />
                 <div style={{ marginBottom: 3 }}>Rewards <span style={hint}>(item as /give writes it; [components] allowed)</span></div>

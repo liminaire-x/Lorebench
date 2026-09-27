@@ -38,7 +38,9 @@ import java.util.regex.Pattern;
  *              "active": [ "아직 부족하구먼." ], "complete": [ "고맙네!" ] },
  *   "supplies": [ { "item": "minecraft:wheat_seeds", "count": 5 } ],
  *   "goals":   [ { "item": "minecraft:wheat",   "count": 10 }, { "kill": "minecraft:wolf", "count": 3 },
- *                { "harvest": "minecraft:potatoes", "count": 5 }, { "breed": "minecraft:cow", "count": 2 } ],
+ *                { "harvest": "minecraft:potatoes", "count": 5 }, { "breed": "minecraft:cow", "count": 2 },
+ *                { "collect": "minecraft:amethyst_shard[custom_name='\"목걸이 조각\"']", "count": 3,
+ *                  "from": "kill:minecraft:wolf", "chance": 0.5 } ],
  *   "rewards": [ { "item": "minecraft:emerald", "count": 5 } ] } ] }</pre>
  * {@code folders}, a folder's {@code parent}, and a quest's {@code icon}, {@code text}, {@code folder},
  * {@code giver}, {@code receiver}, {@code requires}, {@code lines} and {@code supplies} are optional (no parent or
@@ -243,13 +245,19 @@ public final class QuestFormat {
     private static final Map<QuestDoc.Goal.Kind, String> TARGET_EXAMPLE = Map.of(
             QuestDoc.Goal.Kind.KILL, "an entity id like minecraft:wolf",
             QuestDoc.Goal.Kind.HARVEST, "a crop block id like minecraft:wheat",
-            QuestDoc.Goal.Kind.BREED, "an entity id like minecraft:cow");
+            QuestDoc.Goal.Kind.BREED, "an entity id like minecraft:cow",
+            QuestDoc.Goal.Kind.COLLECT, "an item like minecraft:amethyst_shard or minecraft:amethyst_shard[...]");
+
+    /** Where a collect goal's item drops. Only kills for now (0012). */
+    private static final Pattern FROM = Pattern.compile("kill:[a-z0-9_.-]+:[a-z0-9_./-]+");
 
     /**
      * Goals: each names exactly one kind: {@code item} (hand in; an item condition as
      * {@code /clear} reads it), {@code kill} (an entity type id), {@code harvest} (a
-     * crop block id) or {@code breed} (an entity type id). Counted goals of one kind must name different targets, because
-     * progress is saved per kind and target.
+     * crop block id), {@code breed} (an entity type id) or {@code collect} (an item that drops, with {@code from}
+     * and an optional {@code chance}). Counted goals of one kind must name different targets, because
+     * progress is saved per kind and target; collect goals of one quest must name different items, because
+     * the quest's items are told apart by item.
      */
     private static List<QuestDoc.Goal> goals(JsonObject o, String where, List<String> errors) {
         JsonElement e = o.get("goals");
@@ -274,15 +282,35 @@ public final class QuestFormat {
                 }
             }
             if (kinds != 1) {
-                errors.add(where + ": a goal needs exactly one of 'item', 'kill', 'harvest' or 'breed'");
+                errors.add(where + ": a goal needs exactly one of 'item', 'kill', 'harvest', 'breed' or 'collect'");
                 continue;
             }
             String target = optional(go, kind.key);
             // An item goal is a condition as /clear reads it (minecraft:wheat,
             // minecraft:iron_sword[custom_data={...}], #minecraft:logs ...); the
             // game's parser checks it on publish.
-            if (kind.counted() && !ITEM.matcher(target).matches()) {
+            if ((kind.counted() && !ITEM.matcher(target).matches())
+                    || (kind == QuestDoc.Goal.Kind.COLLECT && !ITEM_WITH_COMPONENTS.matcher(target).matches())) {
                 errors.add(where + ": goal " + kind.key + " '" + target + "' is not " + TARGET_EXAMPLE.get(kind));
+                continue;
+            }
+            String from = optional(go, "from");
+            double chance = 1;
+            if (kind == QuestDoc.Goal.Kind.COLLECT) {
+                if (!FROM.matcher(from).matches()) {
+                    errors.add(where + ": goal collect '" + target + "' needs 'from' like kill:minecraft:wolf");
+                    continue;
+                }
+                JsonElement c = go.get("chance");
+                if (c != null) {
+                    chance = c.isJsonPrimitive() && c.getAsJsonPrimitive().isNumber() ? c.getAsDouble() : -1;
+                    if (!(chance > 0 && chance <= 1)) {
+                        errors.add(where + ": goal collect '" + target + "' chance must be above 0 and at most 1");
+                        continue;
+                    }
+                }
+            } else if (go.has("from") || go.has("chance")) {
+                errors.add(where + ": only collect goals have 'from' and 'chance'");
                 continue;
             }
             int count = count(go.get("count"));
@@ -294,7 +322,12 @@ public final class QuestFormat {
                 errors.add(where + ": two " + kind.key + " goals for '" + target + "'; use one with the total count");
                 continue;
             }
-            out.add(new QuestDoc.Goal(kind, target, count));
+            QuestDoc.Goal goal = new QuestDoc.Goal(kind, target, count, from, chance);
+            if (kind == QuestDoc.Goal.Kind.COLLECT && !counted.add("collect:" + goal.itemId())) {
+                errors.add(where + ": two collect goals for " + goal.itemId() + "; use a different item for each");
+                continue;
+            }
+            out.add(goal);
         }
         return List.copyOf(out);
     }
@@ -358,6 +391,12 @@ public final class QuestFormat {
                 JsonObject go = new JsonObject();
                 go.addProperty(g.kind().key, g.target());
                 go.add("count", new JsonPrimitive(g.count()));
+                if (g.kind() == QuestDoc.Goal.Kind.COLLECT) {
+                    go.addProperty("from", g.from());
+                    if (g.chance() < 1) {
+                        go.addProperty("chance", g.chance());
+                    }
+                }
                 goals.add(go);
             }
             o.add("goals", goals);

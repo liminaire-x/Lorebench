@@ -173,6 +173,11 @@ public final class LorebenchRuntime {
                     case KILL -> checks.entity(g.target());
                     case HARVEST -> checks.crop(g.target());
                     case BREED -> checks.breedable(g.target());
+                    case COLLECT -> {
+                        String item = checks.item(g.target());
+                        String from = checks.entity(g.from().substring(g.from().indexOf(':') + 1)); // kill:<entity>
+                        yield item != null ? item : from == null ? null : "from '" + g.from() + "': " + from;
+                    }
                 };
                 String what = g.kind() == QuestDoc.Goal.Kind.ITEM ? "goal" : g.kind().key;
                 check(errors, where + what + " '" + g.target() + "': ", problem);
