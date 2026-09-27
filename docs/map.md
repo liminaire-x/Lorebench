@@ -48,7 +48,7 @@ Lorebench는 **클라이언트+서버 모드**다. 플레이어도 설치한다(
 | 인사말 | 할 이야기가 없을 때 NPC가 하는 말(NPC 문서의 `greeting`) | **칸 비쌈**, 내용은 쌈 |
 | 퀘스트 | 제목·아이콘·본문·목표·보상을 가진 콘텐츠. `quests.json`. [0005](decisions/0005-quests.md) | **id·형식 비쌈**, 내용은 쌈 |
 | 주는·받는 NPC, 선행 | 누가 제안하고(`giver`) 누구에게 건네나(`receiver`, 없으면 주는 NPC), 먼저 끝내야 할 퀘스트(`requires`). [0009](decisions/0009-quest-workbench.md) | **칸 비쌈** |
-| 대사 | 제안·수락 뒤·진행 중·제출 때 NPC가 하는 말. **한 줄 = 한 페이지**, 줄마다 애니메이션을 붙일 수 있다(대화한 사람 화면에서만). [0009](decisions/0009-quest-workbench.md), [0010](decisions/0010-farming-goals.md) | **칸 비쌈**, 내용은 쌈 |
+| 대사 | 제안·수락 뒤·거절 뒤·진행 중·제출 때, 기다림이 있으면 건넨 뒤·기다리는 중·받기 전([0013](decisions/0013-waiting.md)) NPC가 하는 말. **한 줄 = 한 페이지**, 줄마다 애니메이션을 붙일 수 있다(대화한 사람 화면에서만). [0009](decisions/0009-quest-workbench.md), [0010](decisions/0010-farming-goals.md) | **칸 비쌈**, 내용은 쌈 |
 | 목표 | 제출형(`item`, 아이템을 가져옴), 또는 받은 뒤 **직접 한 행동**을 세는 처치형(`kill`)·수확형(`harvest`, 다 자란 작물 포기 수)·번식형(`breed`, 태어난 새끼 수). 섞어 걸 수 있다. [0005](decisions/0005-quests.md), [0010](decisions/0010-farming-goals.md) | **형식 비쌈** |
 | 아이템 표기 | 보상·지급품은 `/give` 문법, 제출형 목표는 `/clear` 조건(적힌 부분만 비교, 숨은 표식으로 위조 방지). [0006](decisions/0006-item-syntax.md) | **비쌈** (문서에 남음) |
 | 기다림 | 건넨 뒤 보상까지 기다리는 게임 날짜(`wait: { days }`). 날짜는 아침 6시(자고 일어나면)에 넘어간다. [0013](decisions/0013-waiting.md) | **칸 비쌈** |

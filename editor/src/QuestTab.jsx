@@ -424,6 +424,13 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                 <SpeechEditor value={quest.lines?.active} onChange={(v) => setLines('active', v)} placeholder="아직 부족하구먼." inQuest quests={quests} />
                 <div style={{ margin: '10px 0 3px' }}>Hand in <span style={hint}>(the receiver, before Hand over)</span></div>
                 <SpeechEditor value={quest.lines?.complete} onChange={(v) => setLines('complete', v)} placeholder="고맙네!" inQuest quests={quests} />
+                <div style={{ ...hint, margin: '12px 0 0' }}>With a wait (Needs and rewards):</div>
+                <div style={{ margin: '4px 0 3px' }}>After handing over <span style={hint}>(the receiver, right after Hand over)</span></div>
+                <SpeechEditor value={quest.lines?.handed} onChange={(v) => setLines('handed', v)} placeholder="칼을 벼리는 데 하루는 걸리네. 내일 오게." inQuest quests={quests} />
+                <div style={{ margin: '10px 0 3px' }}>While waiting <span style={hint}>(the receiver; with no lines the quest shows but can't be chosen)</span></div>
+                <SpeechEditor value={quest.lines?.waiting} onChange={(v) => setLines('waiting', v)} placeholder="아직 망치질 중일세." inQuest quests={quests} />
+                <div style={{ margin: '10px 0 3px' }}>When it's ready <span style={hint}>(the receiver, before Take)</span></div>
+                <SpeechEditor value={quest.lines?.ready} onChange={(v) => setLines('ready', v)} placeholder="다 됐네! 받게." inQuest quests={quests} />
               </Section>
 
               <Section title="Needs and rewards">

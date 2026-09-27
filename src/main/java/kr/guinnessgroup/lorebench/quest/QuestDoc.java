@@ -68,14 +68,19 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      * @param declined right after the player turns it down (0012)
      * @param active   when the player talks to the receiver while it is in progress
      * @param complete when the player hands it in
+     * @param handed   right after the player hands in a quest with a wait (0013)
+     * @param waiting  when the player talks to the receiver while waiting (0013)
+     * @param ready    when the wait is over, before the player takes the rewards (0013)
      */
-    public record Lines(Speech offer, Speech accepted, Speech declined, Speech active, Speech complete) {
+    public record Lines(Speech offer, Speech accepted, Speech declined, Speech active, Speech complete,
+                        Speech handed, Speech waiting, Speech ready) {
 
-        public static final Lines NONE = new Lines(Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE);
+        public static final Lines NONE = new Lines(Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE,
+                Speech.NONE, Speech.NONE, Speech.NONE);
 
         /** In the order of their keys in the document. */
         public List<Speech> all() {
-            return List.of(offer, accepted, declined, active, complete);
+            return List.of(offer, accepted, declined, active, complete, handed, waiting, ready);
         }
     }
 

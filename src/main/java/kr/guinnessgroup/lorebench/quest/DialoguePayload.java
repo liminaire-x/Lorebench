@@ -29,7 +29,7 @@ import java.util.Map;
  * @param resume sent after the player accepted, declined or handed something in: carry on with
  *               the list instead of starting over
  * @param said   with {@code resume}: what the NPC says first (a quest's lines for right after
- *               accepting or declining it), or empty
+ *               accepting or declining it, or handing it in to wait), or empty
  */
 public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.Line> greeting, List<Entry> entries,
                               boolean resume, List<DialogueLines.Line> said)

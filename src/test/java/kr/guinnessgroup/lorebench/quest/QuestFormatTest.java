@@ -76,7 +76,7 @@ class QuestFormatTest {
         QuestDoc.Flow wolf = doc.find("quest_wolf").flow();
         assertEquals(new QuestDoc.Flow("npc_guard", "npc_smith", List.of("quest_sword"),
                 new QuestDoc.Lines(Speech.text("늑대 3마리만 잡아주게.", "요즘 가축이 자꾸 사라지거든."), Speech.NONE,
-                        Speech.NONE, Speech.NONE, Speech.text("대단하군!"))),
+                        Speech.NONE, Speech.NONE, Speech.text("대단하군!"), Speech.NONE, Speech.NONE, Speech.NONE)),
                 wolf);
         assertEquals("npc_smith", wolf.handInTo());
         assertEquals("npc_smith", doc.find("quest_sword").flow().handInTo());
@@ -152,6 +152,31 @@ class QuestFormatTest {
                     "{\"format\":1,\"quests\":[{\"id\":\"quest_a\",\"title\":\"A\",\"goals\":[],\"rewards\":[],\"wait\":"
                             + wait + "}]}"), wait);
         }
+    }
+
+    @Test
+    void linesAroundTheWaitRoundTrip() {
+        QuestDoc doc = QuestFormat.read("""
+                { "format": 1, "quests": [ { "id": "quest_order", "title": "칼 주문", "giver": "npc_smith",
+                  "lines": { "complete": [ "철은 다 모았군. 어디 보세." ],
+                             "handed": [ "칼을 벼리는 데 하루는 걸리네.", "내일 오게." ],
+                             "waiting": [ { "when": { "questState": { "quest_order": "waiting" } }, "lines": [ "아직 망치질 중일세." ] },
+                                          { "lines": [ "음?" ] } ],
+                             "ready": [ { "text": "다 됐네!", "animation": "animation.chief.happy" } ] },
+                  "goals": [ { "item": "minecraft:iron_ingot", "count": 5 } ], "wait": { "days": 1 }, "rewards": [] } ] }
+                """);
+        QuestDoc.Lines lines = doc.find("quest_order").flow().lines();
+        assertEquals(Speech.text("칼을 벼리는 데 하루는 걸리네.", "내일 오게."), lines.handed());
+        assertEquals(2, lines.waiting().groups().size());
+        assertEquals(Speech.of(List.of(new DialogueLines.Line("다 됐네!", "animation.chief.happy"))), lines.ready());
+        String written = QuestFormat.write(doc);
+        assertTrue(written.contains("\"handed\"") && written.contains("\"waiting\"") && written.contains("\"ready\""), written);
+        assertEquals(doc, QuestFormat.read(written));
+        // Conditions in them name quests that exist, as in the other lines.
+        assertThrows(DocumentException.class, () -> QuestFormat.read("""
+                { "format": 1, "quests": [ { "id": "quest_order", "title": "칼 주문", "goals": [], "rewards": [],
+                  "lines": { "waiting": [ { "when": { "questState": { "quest_gone": "done" } }, "lines": [ "음?" ] } ] } } ] }
+                """));
     }
 
     @Test

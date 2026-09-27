@@ -118,7 +118,14 @@ public final class Dialogues {
                     quests.decline(player, questId);
                     said = runtime.quest(questId).flow().lines().declined().pick(facts(player, questId));
                 }
-                case HAND_IN -> quests.complete(player, choice.questId());
+                case HAND_IN -> {
+                    boolean handedBefore = quests.handedIn(player, questId);
+                    quests.complete(player, questId);
+                    if (!handedBefore && quests.handedIn(player, questId)) {
+                        // Handed in, and now it waits (0013).
+                        said = runtime.quest(questId).flow().lines().handed().pick(facts(player, questId));
+                    }
+                }
             }
         }
         send(player, def, npc, plan(player, def.id()), true, said);

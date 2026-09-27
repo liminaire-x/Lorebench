@@ -132,6 +132,14 @@ class DialogueTest {
         assertEquals(Speech.text("자, 자네 칼일세."), Dialogue.lines(new Dialogue.Entry(Dialogue.Kind.READY, sword)));
         assertEquals(Speech.NONE, Dialogue.lines(new Dialogue.Entry(Dialogue.Kind.ACTIVE, sword)));
         assertEquals(Speech.NONE, Dialogue.lines(new Dialogue.Entry(Dialogue.Kind.WAITING, sword)));
-        assertEquals(Speech.NONE, Dialogue.lines(new Dialogue.Entry(Dialogue.Kind.TAKE, sword)));
+        QuestDoc.Quest order = QuestFormat.read("""
+                { "format": 1, "quests": [ { "id": "quest_order", "title": "칼 주문", "giver": "npc_smith",
+                  "lines": { "complete": ["어디 보세."], "handed": ["내일 오게."], "waiting": ["아직 망치질 중일세."],
+                             "ready": ["다 됐네!"] },
+                  "goals": [], "wait": { "days": 1 }, "rewards": [] } ] }
+                """).find("quest_order");
+        assertEquals(Speech.text("어디 보세."), Dialogue.lines(new Dialogue.Entry(Dialogue.Kind.READY, order)));
+        assertEquals(Speech.text("아직 망치질 중일세."), Dialogue.lines(new Dialogue.Entry(Dialogue.Kind.WAITING, order)));
+        assertEquals(Speech.text("다 됐네!"), Dialogue.lines(new Dialogue.Entry(Dialogue.Kind.TAKE, order)));
     }
 }

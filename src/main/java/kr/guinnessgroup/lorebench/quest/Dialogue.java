@@ -78,17 +78,15 @@ public final class Dialogue {
         return entries.isEmpty() || !entries.get(0).kind().startsTalk() ? null : entries.get(0);
     }
 
-    /**
-     * What the NPC says for an entry, before picking by condition ({@link Speech#pick}).
-     * Waiting and taking have no lines yet (their own come with the fifth story's second part).
-     */
+    /** What the NPC says for an entry, before picking by condition ({@link Speech#pick}). */
     public static Speech lines(Entry entry) {
         QuestDoc.Lines lines = entry.quest().flow().lines();
         return switch (entry.kind()) {
             case READY -> lines.complete();
+            case TAKE -> lines.ready();
             case OFFER -> lines.offer();
             case ACTIVE -> lines.active();
-            case TAKE, WAITING -> Speech.NONE;
+            case WAITING -> lines.waiting();
         };
     }
 }
