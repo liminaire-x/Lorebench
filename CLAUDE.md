@@ -79,5 +79,6 @@
   - 문서 추출은 **서브에이전트를 쓰지 않고 외부 AI(Gemini)**로: `graphify.llm.extract_corpus_parallel(files, backend="gemini")`. 키는 사용자 환경변수 `GEMINI_API_KEY`(값은 어디에도 적지 않음).
   - Gemini 무료 등급은 한도가 작다(분당 요청 5회 등, 503 과부하도 잦음). **`token_budget=5000`, `deep_mode=True`, `max_concurrency=1`**(20000으로 크게 묶으면 문서마다 제목 노드 하나뿐이었다). 그래도 실패하면 **코드(AST)만 빌드**하고 나중에 `--update`(실패한 문서는 다음에 다시 추출 대상). `.claude/skills/`의 Blockbench 문서는 프로젝트 문서가 아니라 추출에서 뺀다(그래서 늘 "미추출 10개"로 남는다).
   - 중간 단계 파이썬은 스크래치패드에 `.py`로 써서 실행하고 `if __name__ == '__main__':`를 둔다. 인라인 heredoc + `Remove-Item`을 한 PowerShell 호출에 이으면 조용히 실패한다.
-  - `graphify-out/`은 git 밖. 마지막 빌드: 2026-09-26 밤(농부 이야기 뒤), 1141 노드·2889 연결·75 묶음, 중심 = `Quests`·`LorebenchRuntime`·`NpcEntity`·`DialogueScreen`. 문서 추출은 여전히 얕다(개념 일부만).
+  - `graphify-out/`은 git 밖. 마지막 빌드: 2026-09-27(대화 몸짓 뒤, `--update`), 1205 노드·2962 연결·101 묶음, 중심 = `NpcEntity`·`Quests`·`LorebenchRuntime`·`DialogueScreen`. 문서 추출은 여전히 얕다(개념 일부만).
+  - `graphify export html` CLI는 이 환경에서 아무 말 없이 실패한다(exit 1) → `graphify.export.to_html(G, communities, 'graphify-out/graph.html', community_labels=labels)`로 직접 쓴다.
 - **셸 함정**: `sed` 치환에 `#` 구분자를 쓰면 `#minecraft:logs`, `## 제목`과 충돌한다. 파일 수정은 Edit 도구를 먼저, 셸 치환이 꼭 필요하면 `|` 구분자. 긴 파이썬 스크립트(특히 JSX·자바 코드가 든 수정 스크립트)는 **Bash heredoc으로 파일을 쓰는 것 자체**가 따옴표를 잘못 읽어 실패한다 → **Write 도구로** 스크래치패드에 `.py`를 쓰고 Bash로 실행(토큰은 거의 같고, 실패해 다시 쓰는 비용이 훨씬 큼). 수정은 `rep(old, new)` + `assert count == 1`로.
