@@ -6,6 +6,9 @@
 
 > 상태 값 `waiting`(2026-09-27, [0013](0013-waiting.md)): 저장하는 상태에 `waiting`(건넨 뒤 기다리는 중)이 더해지고, `Quest State` 갈래는 hidden / active / waiting / ready / done이다.
 
+> 퀘스트 단계(2026-09-27, [0015](0015-quest-stages.md)): `goals`는 퀘스트가 아니라 **단계**(`stages`)마다 있다. `rewards`는 퀘스트에
+> 남고, 단계가 끝날 때 주는 `gives`가 더해진다. 상태 `active`는 어느 단계든 진행 중이라는 뜻이고, 지금 단계는 `stage_<퀘스트 id>`.
+
 > 처치 수 기록 키(2026-09-26, [0010](0010-farming-goals.md)): 아래 `{"minecraft:wolf": 2}`는 `{"kill:minecraft:wolf": 2}`로
 > 바뀐다(수확·번식과 섞이지 않게 종류 표시).
 
