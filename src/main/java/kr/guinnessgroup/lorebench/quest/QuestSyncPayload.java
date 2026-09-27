@@ -43,7 +43,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // Handled on the client's main thread (the registrar's default).
-        event.registrar("6").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
+        event.registrar("7").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
     }
 
     @Override
@@ -74,8 +74,9 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
     /**
      * What a player's screen shows of a quest: id, title, icon, story, rewards, supplies, and each
      * stage given (the caller cuts them with {@link QuestDoc.Quest#upTo}) with what to do and its goals.
-     * Folders are for the editor only, and givers, NPCs, lines and waits stay on the server (dialogue
-     * sends the lines it needs, the state says whether it is waiting), so they aren't sent.
+     * Folders are for the editor only, and givers, NPCs, lines, waits and gifts stay on the server (dialogue
+     * sends the lines it needs, the state says whether it is waiting, and a gift is seen when it is given),
+     * so they aren't sent.
      * Shared with {@link DialoguePayload}.
      */
     static void writeQuest(FriendlyByteBuf buf, QuestDoc.Quest q) {
@@ -94,6 +95,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
                 buf.writeEnum(g.kind());
                 buf.writeUtf(g.target());
                 buf.writeVarInt(g.count());
+                buf.writeBoolean(g.keep());
             }
         }
     }
@@ -108,7 +110,8 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
         int n = buf.readVarInt();
         List<QuestDoc.Stage> stages = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            stages.add(new QuestDoc.Stage(buf.readUtf(), buf.readUtf(), "", readGoals(buf), 0, QuestDoc.StageLines.NONE));
+            stages.add(new QuestDoc.Stage(buf.readUtf(), buf.readUtf(), "", readGoals(buf), 0, List.of(),
+                    QuestDoc.StageLines.NONE));
         }
         return new QuestDoc.Quest(id, title, icon, text, rewards, supplies, "", QuestDoc.Flow.NONE, List.copyOf(stages));
     }
@@ -134,7 +137,8 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
         int n = buf.readVarInt();
         List<QuestDoc.Goal> out = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            out.add(new QuestDoc.Goal(buf.readEnum(QuestDoc.Goal.Kind.class), buf.readUtf(), buf.readVarInt()));
+            out.add(new QuestDoc.Goal(buf.readEnum(QuestDoc.Goal.Kind.class), buf.readUtf(), buf.readVarInt(), "", 1,
+                    buf.readBoolean()));
         }
         return List.copyOf(out);
     }

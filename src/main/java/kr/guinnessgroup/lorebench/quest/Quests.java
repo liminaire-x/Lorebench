@@ -314,10 +314,11 @@ public final class Quests {
 
     /**
      * One step on with a ready quest's stage, all at once on the server thread. Handing it in
-     * takes the goal items and drops the stage's progress; then a stage with a wait records the
-     * day and waits (0013), any other is done. A waiting stage whose wait is over is done. A done
-     * stage moves the player to the next one, from nothing (0015); the last gives the rewards and
-     * the quest is done. Rewards that do not fit drop at the player's feet (like {@code /give}).
+     * takes the goal items (not those only shown) and drops the stage's progress; then a stage with
+     * a wait records the day and waits (0013), any other is done. A waiting stage whose wait is over
+     * is done. A done stage gives its gifts (quest items marked for the player) and moves the player
+     * to the next one, from nothing (0015); the last also gives the rewards and the quest is done.
+     * What does not fit drops at the player's feet (like {@code /give}).
      *
      * @return false (and nothing changes) if the quest is not ready for this player
      */
@@ -331,9 +332,12 @@ public final class Quests {
         if (!handedIn(player, questId)) {
             Inventory inventory = player.getInventory();
             for (QuestDoc.Goal goal : stage.goals()) {
+                if (!goal.takes()) {
+                    continue; // only shown (0015), or nothing to take (kills ...)
+                }
                 if (goal.kind() == QuestDoc.Goal.Kind.ITEM) {
                     take(inventory, condition(player, goal.target()), goal.count());
-                } else if (goal.kind() == QuestDoc.Goal.Kind.COLLECT) {
+                } else {
                     take(inventory, QuestItems.of(goal, questId, player.getUUID()), goal.count());
                 }
             }
@@ -346,6 +350,13 @@ public final class Quests {
             }
         }
         records.set(owner, QuestWaits.key(questId), null);
+        for (QuestDoc.Stack gift : stage.gives()) {
+            ItemStack item = stack(gift.item(), player.registryAccess());
+            if (gift.quest() && !item.isEmpty()) {
+                QuestItems.mark(item, questId, player.getUUID());
+            }
+            give(player, item, gift.count());
+        }
         QuestDoc.Stage next = quest.after(stage);
         if (next != null) {
             records.set(owner, questId, QuestState.ACTIVE_VALUE);

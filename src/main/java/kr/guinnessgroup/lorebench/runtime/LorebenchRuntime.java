@@ -175,7 +175,8 @@ public final class LorebenchRuntime {
                     case BREED -> checks.breedable(g.target());
                     case COLLECT -> {
                         String item = checks.item(g.target());
-                        String from = checks.entity(g.from().substring(g.from().indexOf(':') + 1)); // kill:<entity>
+                        String from = g.from().isEmpty() ? null // brought by an earlier stage (0015)
+                                : checks.entity(g.from().substring(g.from().indexOf(':') + 1)); // kill:<entity>
                         yield item != null ? item : from == null ? null : "from '" + g.from() + "': " + from;
                     }
                 };
@@ -184,6 +185,9 @@ public final class LorebenchRuntime {
             }
             for (QuestDoc.Stack s : q.rewards()) {
                 check(errors, where + "reward '" + s.item() + "': ", checks.item(s.item()));
+            }
+            for (QuestDoc.Stack s : q.stages().stream().flatMap(st -> st.gives().stream()).toList()) {
+                check(errors, where + "gift '" + s.item() + "': ", checks.item(s.item()));
             }
             for (QuestDoc.Stack s : q.supplies()) {
                 check(errors, where + "supply '" + s.item() + "': ", checks.item(s.item()));

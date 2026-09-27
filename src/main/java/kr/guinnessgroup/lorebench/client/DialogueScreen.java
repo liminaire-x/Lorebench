@@ -327,11 +327,8 @@ final class DialogueScreen extends Screen {
                     button("lorebench.dialogue.decline", x + PAD * 2 + half, y, half, () -> choose(DialogueChoicePayload.Action.DECLINE));
                 }
                 case READY -> {
-                    // A stage that asks for nothing but gives the rewards: they are taken, not handed in (0015).
-                    QuestDoc.Stage stage = shown.quest().current();
-                    String key = stage != null && stage.goals().isEmpty()
-                            ? "lorebench.dialogue.take" : "lorebench.dialogue.hand_in";
-                    button(key, x + PAD, y, half, () -> choose(DialogueChoicePayload.Action.HAND_IN));
+                    button(handInKey(shown.quest().current()), x + PAD, y, half,
+                            () -> choose(DialogueChoicePayload.Action.HAND_IN));
                     button("lorebench.dialogue.later", x + PAD * 2 + half, y, half, this::showList);
                 }
                 // The wait is over: taking the rewards is handing in again, the server knows which (0013).
@@ -357,6 +354,22 @@ final class DialogueScreen extends Screen {
             }
             button("lorebench.dialogue.goodbye", x, y, w, this::onClose);
         }
+    }
+
+    /**
+     * The hand-in button of a stage (0015): Show when it only shows items and takes none, Take when it
+     * asks for nothing but gives the rewards, else Hand over.
+     */
+    private static String handInKey(QuestDoc.Stage stage) {
+        if (stage == null) {
+            return "lorebench.dialogue.hand_in";
+        }
+        if (stage.goals().isEmpty()) {
+            return "lorebench.dialogue.take";
+        }
+        boolean shows = stage.goals().stream().anyMatch(QuestDoc.Goal::keep);
+        return shows && stage.goals().stream().noneMatch(QuestDoc.Goal::takes)
+                ? "lorebench.dialogue.show" : "lorebench.dialogue.hand_in";
     }
 
     private void button(String key, int x, int y, int w, Runnable onPress) {

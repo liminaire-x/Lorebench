@@ -35,9 +35,21 @@ function ListPicker({ value, options, placeholder, choose, onChange }) {
 
 // A quest's goals or rewards: rows of target + count. Goals pick hand in / kill / harvest / breed.
 // Rewards (`wide`) take a whole /give line such as minecraft:iron_sword[custom_name=...],
-// so the item gets its own line.
-function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goals = false }) {
+// so the item gets its own line. A stage's gifts (`gifts`) may be the quest's own items (0015).
+function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goals = false, gifts = false }) {
   const set = (i, key, value) => onChange(stacks.map((s, j) => (j === i ? { ...s, [key]: value } : s)))
+  // A true-or-nothing flag (keep, quest): unticked drops it.
+  const flag = (i, key, on) => onChange(stacks.map((s, j) => {
+    if (j !== i) return s
+    const { [key]: _, ...rest } = s
+    return on ? { ...rest, [key]: true } : rest
+  }))
+  // "Show only" (0015): handing in leaves the items with the player.
+  const keepBox = (i) => (
+    <label title="Only shown: handing in leaves these with the player" style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 11, whiteSpace: 'nowrap' }}>
+      <input type="checkbox" checked={!!stacks[i].keep} onChange={(e) => flag(i, 'keep', e.target.checked)} />show only
+    </label>
+  )
   return (
     <div style={{ marginBottom: 12 }}>
       {stacks.map((s, i) => {
@@ -61,11 +73,12 @@ function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goal
           // A goal is { item, count } (hand in), or something done while active:
           // { kill, count }, { harvest, count } (fully grown crops, one per plant) or
           // { breed, count } (babies born to animals the player fed), or a quest item
-          // { collect, count, from, chance } that drops only for the player on the quest (0012).
+          // { collect, count, from, chance } that drops only for the player on the quest (0012);
+          // without from, one an earlier stage brought (0015). Hand-ins may keep: only shown.
           const kindDef = GOAL_KINDS.find((k) => s[k.key] !== undefined) || GOAL_KINDS[0]
           const kind = kindDef.key
           const setKind = (k) => onChange(stacks.map((x, j) => (j === i
-            ? { [k]: x[kind], count: x.count, ...(k === 'collect' ? { from: 'kill:' } : {}) } : x)))
+            ? { [k]: x[kind], count: x.count, ...(k === 'item' || k === 'collect') && x.keep ? { keep: true } : {} } : x)))
           const kindSelect = (
             <select value={kind} onChange={(e) => setKind(e.target.value)} style={{ padding: '4px 2px' }}>
               {GOAL_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
@@ -73,6 +86,12 @@ function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goal
           )
           if (kind === 'collect') {
             const mob = (s.from || '').replace(/^kill:/, '')
+            // No mob: the items come from an earlier stage and never drop (0015), so no chance either.
+            const setMob = (v) => onChange(stacks.map((x, j) => {
+              if (j !== i) return x
+              const { from, chance, ...rest } = x
+              return v.trim() ? { ...rest, from: 'kill:' + v.trim(), ...(chance !== undefined ? { chance } : {}) } : rest
+            }))
             const percent = s.chance === undefined ? '' : Math.round(s.chance * 1000) / 10
             const setChance = (v) => onChange(stacks.map((x, j) => {
               if (j !== i) return x
@@ -95,15 +114,16 @@ function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goal
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12 }}>
                   drops when they kill
                   <input
-                    value={mob} placeholder="minecraft:wolf"
-                    onChange={(e) => set(i, 'from', 'kill:' + e.target.value.trim())} style={{ ...input, flex: 1 }}
+                    value={mob} placeholder="none: an earlier stage brought it"
+                    title="Empty: the player already has these from an earlier stage (dropped there, or given as a quest item); none drop"
+                    onChange={(e) => setMob(e.target.value)} style={{ ...input, flex: 1 }}
                   />
-                  <input
+                  {mob && <><input
                     type="number" min={1} max={100} value={percent} placeholder="100"
                     title="Chance per kill, in percent (empty = every time)"
                     onChange={(e) => setChance(e.target.value)} style={{ ...input, width: 60 }}
-                  />%
-                  {count}{remove}
+                  />%</>}
+                  {keepBox(i)}{count}{remove}
                 </div>
               </div>
             )
@@ -122,7 +142,7 @@ function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goal
                   onChange={(e) => set(i, kind, e.target.value)} style={{ ...input, flex: 1 }}
                 />
               )}
-              {kind === 'item' && held('item')}{count}{remove}
+              {kind === 'item' && held('item')}{kind === 'item' && keepBox(i)}{count}{remove}
             </div>
           )
         }
@@ -133,7 +153,14 @@ function StackList({ stacks, onChange, fetchHeld, lists = {}, wide = false, goal
               onChange={(e) => set(i, 'item', e.target.value)}
               style={{ ...input, resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }}
             />
-            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>{held('item')}{count}{remove}</div>
+            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
+              {gifts && (
+                <label title="This quest's own item: marked for the player, 'Quest Item' in its tooltip, useless to others" style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 11, marginRight: 'auto' }}>
+                  <input type="checkbox" checked={!!s.quest} onChange={(e) => flag(i, 'quest', e.target.checked)} />quest item
+                </label>
+              )}
+              {held('item')}{count}{remove}
+            </div>
           </div>
         ) : (
           <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 3 }}>
@@ -302,10 +329,10 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
     setQuests((qs) => qs.map((q) => (q.id !== quest.id ? q
       : { ...q, stages: q.stages.map((st) => (st.id === stage.id ? change(st) : st)) })))
   }
-  // One field of the chosen stage; an emptied optional one (to, goals) is dropped.
+  // One field of the chosen stage; an emptied optional one (to, goals, gives) is dropped.
   const setStageField = (key, value) => changeStage((st) => {
     const next = { ...st, [key]: value }
-    if ((key === 'to' && value === '') || (key === 'goals' && !value.length)) delete next[key]
+    if ((key === 'to' && value === '') || ((key === 'goals' || key === 'gives') && !value.length)) delete next[key]
     return next
   })
   // Game days between handing the stage in and going on (0013): { days: n }, none when empty.
@@ -489,6 +516,10 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                     <span>days</span>
                     <span style={hint}>(after Hand over; it goes on once this many mornings pass, 6:00 or waking up. Empty = right away)</span>
                   </label>
+                  <div style={{ marginBottom: 3 }}>
+                    Gives <span style={hint}>(when the stage is done, after its wait; seen only when given. Tick quest item for the story's own things, e.g. a mended necklace to deliver)</span>
+                  </div>
+                  <StackList wide gifts fetchHeld={fetchHeld} stacks={stage.gives || []} onChange={(v) => setStageField('gives', v)} />
                   <div style={{ margin: '10px 0 3px' }}>In progress <span style={hint}>(the stage's NPC; with no lines the quest shows but can't be chosen)</span></div>
                   <SpeechEditor value={stage.lines?.active} onChange={(v) => setStageLines('active', v)} placeholder="아직 부족하구먼." inQuest quests={quests} />
                   <div style={{ margin: '10px 0 3px' }}>Hand in <span style={hint}>(the stage's NPC, before Hand over; with no needs, the talk itself)</span></div>

@@ -89,9 +89,12 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      * @param goals    all must be met, shown in this order; none = just talk to the NPC
      * @param waitDays game days between handing the goals in and going on, or 0 for none;
      *                 see docs/decisions/0013-waiting.md
+     * @param gives    items given when the stage is done (after its wait), before the next one; a quest item
+     *                 ({@link Stack#quest}) is marked for the player like dropped ones (0012). Never sent to clients
      * @param lines    what the NPC says during this stage
      */
-    public record Stage(String id, String text, String to, List<Goal> goals, int waitDays, StageLines lines) {}
+    public record Stage(String id, String text, String to, List<Goal> goals, int waitDays, List<Stack> gives,
+                        StageLines lines) {}
 
     /**
      * How a quest is offered. See docs/decisions/0009-quest-workbench.md.
@@ -146,8 +149,26 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      * Some number of one item, e.g. {@code minecraft:emerald} × 5. A reward item may be
      * written as {@code /give} writes it, with components (name, enchantments, data
      * from other mods): {@code minecraft:iron_sword[custom_name=...]}.
+     *
+     * @param quest a stage's gift that is this quest's own item, marked for the player (0015); else false
      */
-    public record Stack(String item, int count) {}
+    public record Stack(String item, int count, boolean quest) {
+
+        public Stack(String item, int count) {
+            this(item, count, false);
+        }
+
+        /** The item's id without components: {@code minecraft:amethyst_shard}. */
+        public String itemId() {
+            return idOf(item);
+        }
+    }
+
+    /** An item's id without its components: {@code minecraft:amethyst_shard[...]} → {@code minecraft:amethyst_shard}. */
+    static String idOf(String item) {
+        int bracket = item.indexOf('[');
+        return bracket < 0 ? item : item.substring(0, bracket);
+    }
 
     /**
      * One thing a quest asks for. Saved as {@code {"item": "minecraft:wheat", "count": 10}}
@@ -159,16 +180,20 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      * (an entity type id; babies born). See docs/decisions/0010-farming-goals.md. Or a
      * quest item that drops only for the player on the quest:
      * {@code {"collect": "minecraft:amethyst_shard[...]", "count": 3, "from": "kill:minecraft:wolf", "chance": 0.5}}
-     * (an item as {@code /give} writes it; see docs/decisions/0012-lost-necklace.md).
+     * (an item as {@code /give} writes it; see docs/decisions/0012-lost-necklace.md), or without {@code from},
+     * one the player already has from an earlier stage (0015). An item or collect goal with
+     * {@code "keep": true} is only shown: handing in leaves it with the player (0015).
      *
      * @param target an item condition, an entity type id, a block id or an item, depending on {@code kind}
-     * @param from   a collect goal's source, {@code <kind>:<target>} like a progress key ({@code kill:minecraft:wolf}); else ""
+     * @param from   a collect goal's source, {@code <kind>:<target>} like a progress key ({@code kill:minecraft:wolf}),
+     *               or "" (a collect goal's items come from an earlier stage and never drop)
      * @param chance a collect goal's chance to drop per source, above 0 up to 1; else 1
+     * @param keep   handing in leaves the items with the player (an item or collect goal only)
      */
-    public record Goal(Kind kind, String target, int count, String from, double chance) {
+    public record Goal(Kind kind, String target, int count, String from, double chance, boolean keep) {
 
         public Goal(Kind kind, String target, int count) {
-            this(kind, target, count, "", 1);
+            this(kind, target, count, "", 1, false);
         }
 
         public enum Kind {
@@ -208,13 +233,22 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
         }
 
         public static Goal collect(String item, int count, String from, double chance) {
-            return new Goal(Kind.COLLECT, item, count, from, chance);
+            return new Goal(Kind.COLLECT, item, count, from, chance, false);
+        }
+
+        /** This goal, only shown: handing in leaves its items with the player. */
+        public Goal kept() {
+            return new Goal(kind, target, count, from, chance, true);
+        }
+
+        /** Whether handing the stage in takes this goal's items from the player. */
+        public boolean takes() {
+            return (kind == Kind.ITEM || kind == Kind.COLLECT) && !keep;
         }
 
         /** The id a collect goal's item has, without components: {@code minecraft:amethyst_shard}. */
         public String itemId() {
-            int bracket = target.indexOf('[');
-            return bracket < 0 ? target : target.substring(0, bracket);
+            return idOf(target);
         }
 
         /** Where a counted goal's count is kept in the progress record, e.g. {@code kill:minecraft:wolf}. */

@@ -54,7 +54,7 @@ class QuestFormatTest {
         assertEquals(new QuestDoc.Quest("quest_k3f9x2ma", "밀 배달", "minecraft:wheat", "촌장에게 밀 10개를 가져다주자.\n빨리!",
                 List.of(new QuestDoc.Stack("minecraft:emerald", 5)), List.of(), "", QuestDoc.Flow.NONE,
                 List.of(new QuestDoc.Stage("stage_a1b2c3d4", "촌장에게 밀 가져가기", "",
-                        List.of(QuestDoc.Goal.item("minecraft:wheat", 10)), 0, QuestDoc.StageLines.NONE))), q);
+                        List.of(QuestDoc.Goal.item("minecraft:wheat", 10)), 0, List.of(), QuestDoc.StageLines.NONE))), q);
         assertNull(doc.find("quest_other"));
         assertEquals(List.of(), doc.folders());
         String written = QuestFormat.write(doc);
@@ -454,12 +454,13 @@ class QuestFormatTest {
         assertEquals(1, written.split("\"chance\"", -1).length - 1, written); // 1 is left out
         assertEquals(doc, QuestFormat.read(written));
         for (String bad : new String[] {
-                "{ \"collect\": \"minecraft:paper\", \"count\": 1 }",                                        // no from
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1 }",                                        // no from, no earlier stage
                 "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"minecraft:wolf\" }",           // no kind
                 "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"harvest:minecraft:wheat\" }",  // kills only
                 "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\", \"chance\": 0 }",
                 "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\", \"chance\": 1.5 }",
                 "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\", \"chance\": \"half\" }",
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"chance\": 0.5 }",                        // a chance to drop from nothing
                 "{ \"collect\": \"paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\" }",                // not an item
                 "{ \"kill\": \"minecraft:wolf\", \"count\": 1, \"from\": \"kill:minecraft:wolf\" }",         // not a collect goal
                 "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\" },"
@@ -477,6 +478,86 @@ class QuestFormatTest {
                 + "{\"id\":\"stage_one\",\"text\":\"하나\",\"goals\":[" + collect + "," + kill + "]},"
                 + "{\"id\":\"stage_two\",\"text\":\"둘\",\"goals\":[" + collect + "," + kill + "]}],\"rewards\":[]}]}");
         assertEquals(doc.find("quest_a").stages().get(0).goals(), doc.find("quest_a").stages().get(1).goals());
+    }
+
+    // The seventh story (0015): pieces shown to the guard, left with the smith, the mended necklace given to the daughter.
+    static final String NECKLACE = """
+            { "format": 1, "quests": [ { "id": "quest_necklace", "title": "목걸이 찾기", "stages": [
+              { "id": "stage_show", "text": "보여주기", "goals": [
+                { "collect": "minecraft:amethyst_shard", "count": 3, "from": "kill:minecraft:wolf", "chance": 0.5, "keep": true } ] },
+              { "id": "stage_mend", "text": "맡기기", "goals": [ { "collect": "minecraft:amethyst_shard", "count": 3 } ],
+                "gives": [ { "item": "minecraft:heart_of_the_sea[custom_name='\\"고친 목걸이\\"']", "count": 1, "quest": true },
+                           { "item": "minecraft:bread", "count": 2 } ] },
+              { "id": "stage_give", "text": "전하기", "goals": [ { "collect": "minecraft:heart_of_the_sea", "count": 1 } ] } ],
+              "rewards": [] } ] }
+            """;
+
+    @Test
+    void goalsMayBeOnlyShownAndStagesGiveThingsSomeOfThemTheQuestsOwn() {
+        QuestDoc doc = QuestFormat.read(NECKLACE);
+        List<QuestDoc.Stage> stages = doc.find("quest_necklace").stages();
+        QuestDoc.Goal shown = stages.get(0).goals().getFirst();
+        assertEquals(QuestDoc.Goal.collect("minecraft:amethyst_shard", 3, "kill:minecraft:wolf", 0.5).kept(), shown);
+        assertFalse(shown.takes());
+        QuestDoc.Goal handed = stages.get(1).goals().getFirst();
+        assertEquals(QuestDoc.Goal.collect("minecraft:amethyst_shard", 3, "", 1), handed); // no from: never drops
+        assertTrue(handed.takes());
+        assertEquals(List.of(new QuestDoc.Stack("minecraft:heart_of_the_sea[custom_name='\"고친 목걸이\"']", 1, true),
+                new QuestDoc.Stack("minecraft:bread", 2)), stages.get(1).gives());
+        assertEquals("minecraft:heart_of_the_sea", stages.get(1).gives().getFirst().itemId());
+        String written = QuestFormat.write(doc);
+        assertTrue(written.contains("\"keep\": true") && written.contains("\"quest\": true"), written);
+        assertEquals(1, written.split("\"from\"", -1).length - 1, written); // only the goal that drops has one
+        assertEquals(1, written.split("\"keep\"", -1).length - 1, written);
+        assertEquals(1, written.split("\"quest\"", -1).length - 1, written); // plain gifts write no flag
+        assertEquals(doc, QuestFormat.read(written));
+        // Kills and hand-ins still take (or count) as before.
+        assertTrue(QuestDoc.Goal.item("minecraft:wheat", 1).takes());
+        assertFalse(QuestDoc.Goal.kill("minecraft:wolf", 1).takes());
+    }
+
+    @Test
+    void aCollectGoalWithoutFromNeedsAnEarlierStageToBringItsItem() {
+        String dropped = "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:zombie\" }";
+        String had = "{ \"collect\": \"minecraft:paper[custom_name='x']\", \"count\": 1 }";
+        String given = "\"gives\": [ { \"item\": \"minecraft:paper\", \"count\": 1, \"quest\": true } ]";
+        String plainGift = "\"gives\": [ { \"item\": \"minecraft:paper\", \"count\": 1 } ]";
+        // Brought by an earlier stage: dropped there, or given there as the quest's own.
+        twoStages("\"goals\": [" + dropped + "]", "\"goals\": [" + had + "]");
+        twoStages(given, "\"goals\": [" + had + "]");
+        for (String[] stages : new String[][] {
+                {"\"goals\": [" + had + "]", ""},                                   // nothing before the first
+                {"", "\"goals\": [" + had + "], " + given},                      // given only after it
+                {plainGift, "\"goals\": [" + had + "]"},                          // given, but not marked as the quest's
+                {"\"goals\": [" + dropped.replace("paper", "book") + "]", "\"goals\": [" + had + "]"}}) { // another item
+            assertThrows(DocumentException.class, () -> twoStages(stages[0], stages[1]), String.join(" | ", stages));
+        }
+    }
+
+    /** A quest {@code quest_a} with two stages holding {@code first} and {@code second}. */
+    static QuestDoc twoStages(String first, String second) {
+        return QuestFormat.read("{\"format\":1,\"quests\":[{\"id\":\"quest_a\",\"title\":\"A\",\"stages\":["
+                + "{\"id\":\"stage_one\",\"text\":\"하나\"" + (first.isEmpty() ? "" : "," + first) + "},"
+                + "{\"id\":\"stage_two\",\"text\":\"둘\"" + (second.isEmpty() ? "" : "," + second) + "}],\"rewards\":[]}]}");
+    }
+
+    @Test
+    void onlyHandInsAreKeptAndOnlyAStagesGiftsAreTheQuestsOwn() {
+        for (String goal : new String[] {
+                "{ \"kill\": \"minecraft:wolf\", \"count\": 1, \"keep\": true }",      // nothing to keep
+                "{ \"item\": \"minecraft:wheat\", \"count\": 1, \"keep\": \"yes\" }",  // not true or false
+                "{ \"collect\": \"minecraft:paper\", \"count\": 1, \"from\": \"kill:minecraft:wolf\", \"keep\": 1 }"}) {
+            assertThrows(DocumentException.class, () -> one("", "\"goals\": [" + goal + "]"), goal);
+        }
+        one("", "\"goals\": [ { \"item\": \"minecraft:wheat\", \"count\": 1, \"keep\": false } ]");
+        for (String parts : new String[] {
+                "\"supplies\": [ { \"item\": \"minecraft:paper\", \"count\": 1, \"quest\": true } ]"}) {
+            assertThrows(DocumentException.class, () -> one(parts, ""), parts);
+        }
+        assertThrows(DocumentException.class, () -> QuestFormat.read("{\"format\":1,\"quests\":[{\"id\":\"quest_a\","
+                + "\"title\":\"A\"," + stage("stage_a", "") + ",\"rewards\":[{\"item\":\"minecraft:paper\",\"count\":1,\"quest\":true}]}]}"));
+        assertThrows(DocumentException.class, () -> one("", "\"gives\": [ { \"item\": \"minecraft:paper\", \"count\": 1, \"quest\": \"yes\" } ]"));
+        assertThrows(DocumentException.class, () -> one("", "\"gives\": [ { \"item\": \"paper\", \"count\": 1 } ]"));
     }
 
     @Test

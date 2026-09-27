@@ -43,14 +43,17 @@ import java.util.regex.Pattern;
  *                { "collect": "minecraft:amethyst_shard[custom_name='\"목걸이 조각\"']", "count": 3,
  *                  "from": "kill:minecraft:wolf", "chance": 0.5 } ],
  *     "wait": { "days": 1 },
+ *     "gives": [ { "item": "minecraft:amethyst_shard[custom_name='\"고친 목걸이\"']", "count": 1, "quest": true } ],
  *     "lines": { "active": [ "아직 부족하구먼." ], "complete": [ "고맙네!" ],
  *                "handed": [ "내일 오게." ], "waiting": [ "아직 망치질 중일세." ], "ready": [ "다 됐네!" ] } } ],
  *   "rewards": [ { "item": "minecraft:emerald", "count": 5 } ] } ] }</pre>
  * {@code folders}, a folder's {@code parent}, a quest's {@code icon}, {@code text}, {@code folder},
  * {@code giver}, {@code requires}, {@code lines} and {@code supplies}, and a stage's {@code to}, {@code goals},
- * {@code wait} and {@code lines} are optional (no parent or folder = the top, no {@code to} = the giver, no goals = just
- * talk, no wait = go on right away; see docs/decisions/0009-quest-workbench.md, 0013-waiting.md and
- * 0015-quest-stages.md for the rest). A quest has one stage or more; stage ids are unique in the document.
+ * {@code wait}, {@code gives} and {@code lines} are optional (no parent or folder = the top, no {@code to} = the giver,
+ * no goals = just talk, no wait = go on right away; see docs/decisions/0009-quest-workbench.md, 0013-waiting.md and
+ * 0015-quest-stages.md for the rest). A quest has one stage or more; stage ids are unique in the document. A goal
+ * may say {@code "keep": true} (item and collect goals: only shown), a collect goal may leave out {@code from} (it
+ * counts the quest's items an earlier stage drops or gives), and a stage's gift may say {@code "quest": true}.
  * Each of {@code lines} may instead be groups picked by condition ({@link Speech}, 0012). Required quests, and quests
  * the conditions name, must exist, and requirements never lead back to the quest. Beyond that this checks only the
  * shape; whether the items, entities, crops and NPCs exist is checked on publish, where the game's lists are available.
@@ -136,9 +139,9 @@ public final class QuestFormat {
                 }
             }
             List<QuestDoc.Stage> stages = stages(o.get("stages"), where, stageIds, errors);
-            List<QuestDoc.Stack> rewards = stacks(o, "rewards", ITEM_WITH_COMPONENTS, where, errors);
+            List<QuestDoc.Stack> rewards = stacks(o, "rewards", ITEM_WITH_COMPONENTS, false, where, errors);
             List<QuestDoc.Stack> supplies = o.has("supplies")
-                    ? stacks(o, "supplies", ITEM_WITH_COMPONENTS, where, errors) : List.of();
+                    ? stacks(o, "supplies", ITEM_WITH_COMPONENTS, false, where, errors) : List.of();
             QuestDoc.Flow flow = flow(o, where, errors);
             if (errors.size() == before) {
                 quests.add(new QuestDoc.Quest(id, title.trim(), icon, text == null ? "" : text, rewards, supplies, folder,
@@ -185,6 +188,7 @@ public final class QuestFormat {
             return List.of();
         }
         List<QuestDoc.Stage> out = new ArrayList<>();
+        Set<String> brought = new HashSet<>(); // quest items earlier stages drop or give, by item id
         int n = 0;
         for (JsonElement s : e.getAsJsonArray()) {
             n++;
@@ -207,10 +211,21 @@ public final class QuestFormat {
             }
             String to = npc(o, "to", where, errors);
             List<QuestDoc.Goal> goals = o.has("goals") ? goals(o, where, errors) : List.of();
+            for (QuestDoc.Goal g : goals) {
+                if (g.kind() == QuestDoc.Goal.Kind.COLLECT && g.from().isEmpty() && !brought.contains(g.itemId())) {
+                    errors.add(where + ": goal collect '" + g.target() + "' has no 'from', so an earlier stage must drop it"
+                            + " (a collect goal with 'from') or give it (\"gives\" with \"quest\": true)");
+                }
+            }
             int waitDays = waitDays(o.get("wait"), where, errors);
+            List<QuestDoc.Stack> gives = o.has("gives")
+                    ? stacks(o, "gives", ITEM_WITH_COMPONENTS, true, where, errors) : List.of();
             List<Speech> lines = lines(o.get("lines"), STAGE_LINE_KEYS, LINE_KEYS, "the quest", where, errors);
+            goals.stream().filter(g -> g.kind() == QuestDoc.Goal.Kind.COLLECT && !g.from().isEmpty())
+                    .forEach(g -> brought.add(g.itemId()));
+            gives.stream().filter(QuestDoc.Stack::quest).forEach(g -> brought.add(g.itemId()));
             if (errors.size() == before) {
-                out.add(new QuestDoc.Stage(id, text, to, goals, waitDays, new QuestDoc.StageLines(
+                out.add(new QuestDoc.Stage(id, text, to, goals, waitDays, gives, new QuestDoc.StageLines(
                         lines.get(0), lines.get(1), lines.get(2), lines.get(3), lines.get(4))));
             }
         }
@@ -330,7 +345,8 @@ public final class QuestFormat {
      * Goals: each names exactly one kind: {@code item} (hand in; an item condition as
      * {@code /clear} reads it), {@code kill} (an entity type id), {@code harvest} (a
      * crop block id), {@code breed} (an entity type id) or {@code collect} (an item that drops, with {@code from}
-     * and an optional {@code chance}). Counted goals of one kind must name different targets, because
+     * and an optional {@code chance}, or without them one an earlier stage brings, 0015). Item and collect goals
+     * may be {@code keep}: only shown. Counted goals of one kind must name different targets, because
      * progress is saved per kind and target; collect goals of one stage must name different items, because
      * the quest's items are told apart by item (stages go one at a time, so each may name the same item, 0015).
      */
@@ -372,11 +388,15 @@ public final class QuestFormat {
             String from = optional(go, "from");
             double chance = 1;
             if (kind == QuestDoc.Goal.Kind.COLLECT) {
-                if (!FROM.matcher(from).matches()) {
-                    errors.add(where + ": goal collect '" + target + "' needs 'from' like kill:minecraft:wolf");
+                if (!from.isEmpty() && !FROM.matcher(from).matches()) {
+                    errors.add(where + ": goal collect '" + target + "' 'from' must be like kill:minecraft:wolf");
                     continue;
                 }
                 JsonElement c = go.get("chance");
+                if (c != null && from.isEmpty()) {
+                    errors.add(where + ": goal collect '" + target + "' has a 'chance' but no 'from' to drop from");
+                    continue;
+                }
                 if (c != null) {
                     chance = c.isJsonPrimitive() && c.getAsJsonPrimitive().isNumber() ? c.getAsDouble() : -1;
                     if (!(chance > 0 && chance <= 1)) {
@@ -397,7 +417,17 @@ public final class QuestFormat {
                 errors.add(where + ": two " + kind.key + " goals for '" + target + "'; use one with the total count");
                 continue;
             }
-            QuestDoc.Goal goal = new QuestDoc.Goal(kind, target, count, from, chance);
+            JsonElement k = go.get("keep");
+            if (k != null && !(k.isJsonPrimitive() && k.getAsJsonPrimitive().isBoolean())) {
+                errors.add(where + ": goal '" + target + "' 'keep' must be true or false");
+                continue;
+            }
+            boolean keep = k != null && k.getAsBoolean();
+            if (keep && kind != QuestDoc.Goal.Kind.ITEM && kind != QuestDoc.Goal.Kind.COLLECT) {
+                errors.add(where + ": only item and collect goals have 'keep' (nothing is handed in for " + kind.key + ")");
+                continue;
+            }
+            QuestDoc.Goal goal = new QuestDoc.Goal(kind, target, count, from, chance, keep);
             if (kind == QuestDoc.Goal.Kind.COLLECT && !counted.add("collect:" + goal.itemId())) {
                 errors.add(where + ": two collect goals for " + goal.itemId() + "; use a different item for each");
                 continue;
@@ -435,7 +465,9 @@ public final class QuestFormat {
         return 0;
     }
 
-    private static List<QuestDoc.Stack> stacks(JsonObject o, String key, Pattern shape, String where, List<String> errors) {
+    /** @param questItems whether an entry may say {@code "quest": true} (a stage's gifts, 0015) */
+    private static List<QuestDoc.Stack> stacks(JsonObject o, String key, Pattern shape, boolean questItems, String where,
+                                               List<String> errors) {
         JsonElement e = o.get(key);
         if (e == null || !e.isJsonArray()) {
             errors.add(where + ": missing '" + key + "' list");
@@ -458,7 +490,13 @@ public final class QuestFormat {
                 errors.add(where + ": " + key + " count of '" + item + "' must be a whole number from 1 to " + MAX_COUNT);
                 continue;
             }
-            out.add(new QuestDoc.Stack(item, count));
+            JsonElement q = s.getAsJsonObject().get("quest");
+            if (q != null && !(questItems && q.isJsonPrimitive() && q.getAsJsonPrimitive().isBoolean())) {
+                errors.add(where + ": " + key + " item '" + item + "': " + (questItems ? "'quest' must be true or false"
+                        : "only a stage's gives can be quest items"));
+                continue;
+            }
+            out.add(new QuestDoc.Stack(item, count, q != null && q.getAsBoolean()));
         }
         return List.copyOf(out);
     }
@@ -520,11 +558,14 @@ public final class QuestFormat {
                 JsonObject go = new JsonObject();
                 go.addProperty(g.kind().key, g.target());
                 go.add("count", new JsonPrimitive(g.count()));
-                if (g.kind() == QuestDoc.Goal.Kind.COLLECT) {
+                if (!g.from().isEmpty()) {
                     go.addProperty("from", g.from());
                     if (g.chance() < 1) {
                         go.addProperty("chance", g.chance());
                     }
+                }
+                if (g.keep()) {
+                    go.addProperty("keep", true);
                 }
                 goals.add(go);
             }
@@ -534,6 +575,9 @@ public final class QuestFormat {
             JsonObject wait = new JsonObject();
             wait.add("days", new JsonPrimitive(s.waitDays()));
             o.add("wait", wait);
+        }
+        if (!s.gives().isEmpty()) {
+            o.add("gives", writeStacks(s.gives()));
         }
         writeLines(o, s.lines().all(), STAGE_LINE_KEYS);
         return o;
@@ -557,6 +601,9 @@ public final class QuestFormat {
             JsonObject o = new JsonObject();
             o.addProperty("item", s.item());
             o.add("count", new JsonPrimitive(s.count()));
+            if (s.quest()) {
+                o.addProperty("quest", true);
+            }
             arr.add(o);
         }
         return arr;
