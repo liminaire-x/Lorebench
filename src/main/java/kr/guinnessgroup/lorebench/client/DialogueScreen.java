@@ -5,6 +5,7 @@
  */
 package kr.guinnessgroup.lorebench.client;
 
+import kr.guinnessgroup.lorebench.Cues;
 import kr.guinnessgroup.lorebench.DialogueLines;
 import kr.guinnessgroup.lorebench.npc.NpcEntity;
 import kr.guinnessgroup.lorebench.quest.Dialogue;
@@ -15,6 +16,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
+import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -25,9 +28,10 @@ import java.util.List;
 /**
  * Talking to an NPC (0009). The talk starts with the first thing the player can do
  * (hand in, then a new offer), else with the NPC's greeting; afterwards a list shows
- * everything else the NPC can talk about. Lines show one page at a time; a click,
- * Space or Enter turns the page, and a line's animation plays as its page shows (once,
- * or looped until the page turns), on this screen only (other players don't see this talk).
+ * everything else the NPC can talk about. Lines show one page at a time, typing out with
+ * their cues (0014); a click, Space or Enter shows the rest of the page, then turns it. A
+ * line's animation plays as its page shows (once, or looped until the page turns), on this
+ * screen only (other players don't see this talk).
  * The first page waits while the NPC plays its talk start (0011); a click skips the wait. Accepting, declining,
  * handing in and taking the rewards after a wait (0013) go to the server, which checks them and sends back what
  * the NPC says to that and the list.
@@ -51,6 +55,8 @@ final class DialogueScreen extends Screen {
     private Mode mode;
     private List<DialogueLines.Line> pages = List.of();
     private int page;
+    /** The shown page typing out (0014). */
+    private Typing typing;
     private Runnable afterPages;
     private DialoguePayload.Entry shown;
     /** A choice went to the server; buttons stay off until it answers. */
@@ -101,6 +107,9 @@ final class DialogueScreen extends Screen {
         if (mode == Mode.WAIT && !npcStarting()) {
             begin();
         }
+        if (mode == Mode.PAGES && typing != null) {
+            typing.tick();
+        }
     }
 
     /**
@@ -138,8 +147,14 @@ final class DialogueScreen extends Screen {
         animate();
     }
 
+    /** A click, Space or Enter: the rest of a page still typing, else the next page. */
     private void nextPage() {
+        if (typing != null && !typing.done()) {
+            typing.finish();
+            return;
+        }
         if (++page >= pages.size()) {
+            typing = null;
             NpcEntity npc = npc();
             if (npc != null) {
                 npc.showLine("", false); // a line looping on the last page stops
@@ -154,13 +169,22 @@ final class DialogueScreen extends Screen {
 
     /**
      * The shown line's animation, played by the NPC being talked to, on this screen only.
-     * Told on every page, so a line looping on the page before stops.
+     * Told on every page, so a line looping on the page before stops. Then the page starts
+     * typing, and its cues play theirs as the typing reaches them.
      */
     private void animate() {
         DialogueLines.Line line = pages.get(page);
         NpcEntity npc = npc();
         if (npc != null) {
             npc.showLine(line.animation(), line.play() == DialogueLines.Play.LOOP);
+        }
+        typing = new Typing(line.text(), this::cue);
+    }
+
+    private void cue(Cues.Animate cue) {
+        NpcEntity npc = npc();
+        if (npc != null) {
+            npc.showLine(cue.animation(), cue.loop());
         }
     }
 
@@ -221,7 +245,8 @@ final class DialogueScreen extends Screen {
         if (mode == Mode.LIST) {
             return PAD * 2 + (talk.entries().size() + 1) * (BUTTON_H + 2);
         }
-        int lines = font.split(Component.literal(pages.get(page).text()), boxW() - PAD * 2).size();
+        // Sized for the whole page, so the box doesn't grow as it types.
+        int lines = font.split(Component.literal(Cues.plain(pages.get(page).text())), boxW() - PAD * 2).size();
         return Math.max(48, PAD * 2 + lines * (font.lineHeight + 2) + 8);
     }
 
@@ -359,14 +384,23 @@ final class DialogueScreen extends Screen {
         g.drawString(font, title, x + PAD, y - font.lineHeight - 2, GOLD);
         g.fill(x - 1, y - 1, x + w + 1, y + h + 1, BORDER);
         g.fill(x, y, x + w, y + h, PANEL);
-        if (mode == Mode.PAGES) {
+        if (mode == Mode.PAGES && typing != null) {
+            // The page is wrapped whole, then each row shows the letters typed so far, so a word
+            // never jumps to the next row as it types. Wrapping may drop the space at a break, so
+            // each row is found in the page from where the last one ended.
+            String plain = typing.plain();
+            int from = 0;
             int ty = y + PAD;
-            for (FormattedCharSequence line : font.split(Component.literal(pages.get(page).text()), w - PAD * 2)) {
-                g.drawString(font, line, x + PAD, ty, WHITE);
+            for (FormattedText row : font.getSplitter().splitLines(plain, w - PAD * 2, Style.EMPTY)) {
+                String s = row.getString();
+                int start = Math.max(from, plain.indexOf(s, from));
+                int visible = Math.clamp(typing.shown() - start, 0, s.length());
+                g.drawString(font, s.substring(0, visible), x + PAD, ty, WHITE);
+                from = start + s.length();
                 ty += font.lineHeight + 2;
             }
-            // Blinks: click for the next page.
-            if ((System.currentTimeMillis() / 500) % 2 == 0) {
+            // Blinks once the page is all there: click for the next page.
+            if (typing.done() && (System.currentTimeMillis() / 500) % 2 == 0) {
                 g.drawString(font, "▼", x + w - PAD - font.width("▼"), y + h - PAD - font.lineHeight + 2, GRAY);
             }
         }

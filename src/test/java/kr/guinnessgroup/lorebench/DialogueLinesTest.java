@@ -80,6 +80,22 @@ class DialogueLinesTest {
     }
 
     @Test
+    void cuesInsideTheTextMustReadAndALineOfOnlyCuesIsEmpty() {
+        List<String> errors = new ArrayList<>();
+        List<DialogueLines.Line> lines = read("""
+                [ "<speed=0.5>이 밭 좀 보게<pause=1>……" ]
+                """, errors);
+        assertEquals(List.of(), errors);
+        assertEquals(List.of(DialogueLines.Line.of("<speed=0.5>이 밭 좀 보게<pause=1>……")), lines);
+        read("[ \"이 밭<speed=fast>\" ]", errors);
+        assertEquals(1, errors.size());
+        assertTrue(errors.get(0).startsWith("lines: in '이 밭<speed=fast>', '<speed=fast>' at character 4"), errors.get(0));
+        errors.clear();
+        read("[ \"<pause=1>\" ]", errors);
+        assertEquals(List.of("lines: a line is empty"), errors);
+    }
+
+    @Test
     void noLinesIsNothing() {
         List<String> errors = new ArrayList<>();
         assertTrue(DialogueLines.read(null, "lines", errors).isEmpty());

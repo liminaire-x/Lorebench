@@ -73,8 +73,8 @@ public final class DialogueLines {
     }
 
     /**
-     * Reads a list of lines (absent = none). Each line's text must not be blank, and an
-     * animation, if given, must not be blank either.
+     * Reads a list of lines (absent = none). Each line's text must not be blank (cues aside), its
+     * cues must read ({@link Cues}, 0014), and an animation, if given, must not be blank either.
      *
      * @param where names the list in error messages, e.g. "quest 'quest_a' offer"
      */
@@ -95,10 +95,14 @@ public final class DialogueLines {
                 if (!line.isJsonObject()) {
                     errors.add(where + ": a line must be text, or an object with text and animation");
                 }
-            } else if (read.text().isBlank()) {
+            } else if (Cues.plain(read.text()).isBlank()) {
                 errors.add(where + ": a line is empty");
             } else {
-                lines.add(read);
+                List<String> problems = Cues.problems(read.text());
+                problems.forEach(p -> errors.add(where + ": in '" + shorten(read.text()) + "', " + p));
+                if (problems.isEmpty()) {
+                    lines.add(read);
+                }
             }
         }
         return List.copyOf(lines);
@@ -149,6 +153,11 @@ public final class DialogueLines {
         return new Line(text.getAsString(), name.getAsString().trim(), play);
     }
 
+
+    /** A line in a message: its start, if it is long. */
+    private static String shorten(String text) {
+        return text.length() > 30 ? text.substring(0, 30) + "…" : text;
+    }
 
     private static boolean isText(JsonElement e) {
         return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isString();
