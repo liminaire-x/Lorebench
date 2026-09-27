@@ -39,7 +39,7 @@ import java.util.List;
  * screen only (other players don't see this talk).
  * The first page waits while the NPC plays its talk start (0011); a click skips the wait. Accepting, declining,
  * handing in and taking the rewards after a wait (0013) go to the server, which checks them and sends back what
- * the NPC says to that and the list.
+ * the NPC says to that and the list. A stage with nothing to hand in or get is just talked through (0015).
  */
 final class DialogueScreen extends Screen {
 
@@ -54,8 +54,11 @@ final class DialogueScreen extends Screen {
     /** A letter's sound, softer than the game's own sounds: it plays many times a second. */
     private static final float VOICE_VOLUME = 0.5F;
 
-    /** WAIT: nothing shows while the NPC plays its talk start (the user's choice; a click still skips it). */
-    private enum Mode { WAIT, PAGES, CARD, LIST }
+    /**
+     * WAIT: nothing shows while the NPC plays its talk start (the user's choice; a click still skips it).
+     * SENT: a talk-only stage went to the server; nothing shows until it answers.
+     */
+    private enum Mode { WAIT, PAGES, CARD, LIST, SENT }
 
     private final QuestCard card = new QuestCard();
     private DialoguePayload talk;
@@ -138,7 +141,23 @@ final class DialogueScreen extends Screen {
     }
 
     private void talkAbout(DialoguePayload.Entry entry) {
-        say(entry.lines(), () -> showCard(entry));
+        say(entry.lines(), () -> {
+            if (talkOnly(entry)) {
+                // Nothing to hand in or get: the talk itself is the stage (0015).
+                shown = entry;
+                mode = Mode.SENT;
+                choose(DialogueChoicePayload.Action.HAND_IN);
+            } else {
+                showCard(entry);
+            }
+        });
+    }
+
+    /** A stage that asks for nothing, whose hand-in gives nothing: there is no card to show. */
+    private static boolean talkOnly(DialoguePayload.Entry entry) {
+        QuestDoc.Stage stage = entry.quest().current();
+        return entry.kind() == Dialogue.Kind.READY && stage != null && stage.goals().isEmpty()
+                && entry.quest().rewards().isEmpty();
     }
 
     private void say(List<DialogueLines.Line> lines, Runnable then) {
@@ -250,6 +269,15 @@ final class DialogueScreen extends Screen {
         PacketDistributor.sendToServer(new DialogueChoicePayload(action, shown.quest().id()));
     }
 
+    /** Under the card's title: the quest's story for an offer, else what the stage is (0015). */
+    private String cardText() {
+        QuestDoc.Quest q = shown.quest();
+        if (shown.kind() == Dialogue.Kind.OFFER) {
+            return q.text();
+        }
+        return q.current() == null ? "" : q.current().text();
+    }
+
     // --- layout ---
 
     private int boxW() {
@@ -280,10 +308,10 @@ final class DialogueScreen extends Screen {
 
     private int cardH() {
         QuestDoc.Quest q = shown.quest();
-        int text = q.text().isEmpty() || shown.kind() != Dialogue.Kind.OFFER ? 0
-                : 4 + font.split(Component.literal(q.text()), cardW() - PAD * 2).size() * font.lineHeight;
+        String text = cardText();
+        int textH = text.isEmpty() ? 0 : 4 + font.split(Component.literal(text), cardW() - PAD * 2).size() * font.lineHeight;
         int status = shown.kind() == Dialogue.Kind.WAITING ? 2 + font.lineHeight : 0;
-        return Math.min(height - 20, PAD * 2 + font.lineHeight + status + text
+        return Math.min(height - 20, PAD * 2 + font.lineHeight + status + textH
                 + card.height(font, q, shown.kind() == Dialogue.Kind.OFFER, shown.kind() != Dialogue.Kind.TAKE) + 10 + BUTTON_H);
     }
 
@@ -299,7 +327,11 @@ final class DialogueScreen extends Screen {
                     button("lorebench.dialogue.decline", x + PAD * 2 + half, y, half, () -> choose(DialogueChoicePayload.Action.DECLINE));
                 }
                 case READY -> {
-                    button("lorebench.dialogue.hand_in", x + PAD, y, half, () -> choose(DialogueChoicePayload.Action.HAND_IN));
+                    // A stage that asks for nothing but gives the rewards: they are taken, not handed in (0015).
+                    QuestDoc.Stage stage = shown.quest().current();
+                    String key = stage != null && stage.goals().isEmpty()
+                            ? "lorebench.dialogue.take" : "lorebench.dialogue.hand_in";
+                    button(key, x + PAD, y, half, () -> choose(DialogueChoicePayload.Action.HAND_IN));
                     button("lorebench.dialogue.later", x + PAD * 2 + half, y, half, this::showList);
                 }
                 // The wait is over: taking the rewards is handing in again, the server knows which (0013).
@@ -383,7 +415,7 @@ final class DialogueScreen extends Screen {
         ItemStack hovered = ItemStack.EMPTY;
         if (mode == Mode.CARD) {
             hovered = drawCard(g, mouseX, mouseY);
-        } else if (mode != null && mode != Mode.WAIT) {
+        } else if (mode == Mode.PAGES || mode == Mode.LIST) {
             drawBox(g);
         }
         super.render(g, mouseX, mouseY, partialTick); // the buttons, on top
@@ -426,7 +458,7 @@ final class DialogueScreen extends Screen {
         }
     }
 
-    /** A quest's card: title, (for an offer) its story, then needs and rewards. */
+    /** A quest's card: title, its story for an offer (else what the stage is), then needs and rewards. */
     private ItemStack drawCard(GuiGraphics g, int mouseX, int mouseY) {
         QuestDoc.Quest q = shown.quest();
         int w = cardW();
@@ -444,9 +476,10 @@ final class DialogueScreen extends Screen {
             ty += font.lineHeight;
         }
         g.enableScissor(x, ty, x + w, y + h - PAD - BUTTON_H - 4);
-        if (shown.kind() == Dialogue.Kind.OFFER && !q.text().isEmpty()) {
+        String text = cardText();
+        if (!text.isEmpty()) {
             ty += 4;
-            for (FormattedCharSequence line : font.split(Component.literal(q.text()), w - PAD * 2)) {
+            for (FormattedCharSequence line : font.split(Component.literal(text), w - PAD * 2)) {
                 g.drawString(font, line, x + PAD, ty, LIGHT);
                 ty += font.lineHeight;
             }

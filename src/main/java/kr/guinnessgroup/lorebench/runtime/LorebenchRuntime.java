@@ -167,7 +167,7 @@ public final class LorebenchRuntime {
             if (!q.icon().isEmpty()) {
                 check(errors, where + "icon '" + q.icon() + "': ", checks.item(q.icon()));
             }
-            for (QuestDoc.Goal g : q.goals()) {
+            for (QuestDoc.Goal g : q.stages().stream().flatMap(s -> s.goals().stream()).toList()) {
                 String problem = switch (g.kind()) {
                     case ITEM -> checks.itemCondition(g.target());
                     case KILL -> checks.entity(g.target());

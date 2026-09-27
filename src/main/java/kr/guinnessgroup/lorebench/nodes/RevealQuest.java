@@ -16,8 +16,8 @@ import kr.guinnessgroup.lorebench.runtime.NodeType;
 import java.util.List;
 
 /**
- * Reveals a quest to the player: it becomes active and appears in their quest
- * screen. Only this player's client receives it. Does nothing if already revealed.
+ * Reveals a quest to the player: it becomes active at its first stage and appears in their
+ * quest screen. Only this player's client receives it. Does nothing if already revealed.
  */
 public final class RevealQuest implements NodeType {
 

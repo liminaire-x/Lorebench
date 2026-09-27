@@ -29,7 +29,9 @@ API = {
     '/api/quests': {'format': 1, 'quests': [
         {'id': 'quest_farm0001', 'title': '밭일 배우기', 'giver': NPC,
          'supplies': [{'item': 'minecraft:wheat_seeds', 'count': 5}],
-         'goals': [{'harvest': 'minecraft:wheat', 'count': 10}],
+         'stages': [{'id': 'stage_farm0001', 'text': 'wheat',
+                     'goals': [{'harvest': 'minecraft:wheat', 'count': 10}]},
+                    {'id': 'stage_farm0002', 'text': 'tell', 'to': NPC}],
          'rewards': [{'item': 'minecraft:iron_hoe', 'count': 1}]}]},
     '/api/players': {'players': ['Dev1']},
     '/api/held-item': {'item': 'minecraft:iron_sword[custom_name=\'"Blade"\']'},

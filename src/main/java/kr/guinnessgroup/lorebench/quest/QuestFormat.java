@@ -33,24 +33,27 @@ import java.util.regex.Pattern;
  *   "folders": [ { "id": "folder_2kq8d1xz", "name": "마을" }, { "id": "folder_9fm3a0pe", "name": "촌장", "parent": "folder_2kq8d1xz" } ],
  *   "quests": [ {
  *   "id": "quest_k3f9x2ma", "title": "밀 배달", "icon": "minecraft:wheat", "text": "...", "folder": "folder_9fm3a0pe",
- *   "giver": "npc_7ha2m0qe", "receiver": "npc_7ha2m0qe", "requires": [ "quest_p0a8s1dd" ],
- *   "lines": { "offer": [ "밀 10개만 구해다 주겠나?" ], "accepted": [ "부탁하네." ], "declined": [ "그런가…" ],
- *              "active": [ "아직 부족하구먼." ], "complete": [ "고맙네!" ],
- *              "handed": [ "내일 오게." ], "waiting": [ "아직 망치질 중일세." ], "ready": [ "다 됐네!" ] },
+ *   "giver": "npc_7ha2m0qe", "requires": [ "quest_p0a8s1dd" ],
+ *   "lines": { "offer": [ "밀 10개만 구해다 주겠나?" ], "accepted": [ "부탁하네." ], "declined": [ "그런가…" ] },
  *   "supplies": [ { "item": "minecraft:wheat_seeds", "count": 5 } ],
- *   "goals":   [ { "item": "minecraft:wheat",   "count": 10 }, { "kill": "minecraft:wolf", "count": 3 },
+ *   "stages": [ {
+ *     "id": "stage_a1b2c3d4", "text": "촌장에게 밀 가져가기", "to": "npc_7ha2m0qe",
+ *     "goals": [ { "item": "minecraft:wheat",   "count": 10 }, { "kill": "minecraft:wolf", "count": 3 },
  *                { "harvest": "minecraft:potatoes", "count": 5 }, { "breed": "minecraft:cow", "count": 2 },
  *                { "collect": "minecraft:amethyst_shard[custom_name='\"목걸이 조각\"']", "count": 3,
  *                  "from": "kill:minecraft:wolf", "chance": 0.5 } ],
- *   "wait":    { "days": 1 },
+ *     "wait": { "days": 1 },
+ *     "lines": { "active": [ "아직 부족하구먼." ], "complete": [ "고맙네!" ],
+ *                "handed": [ "내일 오게." ], "waiting": [ "아직 망치질 중일세." ], "ready": [ "다 됐네!" ] } } ],
  *   "rewards": [ { "item": "minecraft:emerald", "count": 5 } ] } ] }</pre>
- * {@code folders}, a folder's {@code parent}, and a quest's {@code icon}, {@code text}, {@code folder},
- * {@code giver}, {@code receiver}, {@code requires}, {@code lines}, {@code supplies} and {@code wait} are optional (no
- * parent or folder = the top, no wait = the rewards right away; see docs/decisions/0009-quest-workbench.md and
- * 0013-waiting.md for the rest). Each of {@code lines} may
- * instead be groups picked by condition ({@link Speech}, 0012). Required quests, and quests the conditions
- * name, must exist, and requirements never lead back to the quest. Beyond that this checks only the shape; whether the items,
- * entities, crops and NPCs exist is checked on publish, where the game's lists are available.
+ * {@code folders}, a folder's {@code parent}, a quest's {@code icon}, {@code text}, {@code folder},
+ * {@code giver}, {@code requires}, {@code lines} and {@code supplies}, and a stage's {@code to}, {@code goals},
+ * {@code wait} and {@code lines} are optional (no parent or folder = the top, no {@code to} = the giver, no goals = just
+ * talk, no wait = go on right away; see docs/decisions/0009-quest-workbench.md, 0013-waiting.md and
+ * 0015-quest-stages.md for the rest). A quest has one stage or more; stage ids are unique in the document.
+ * Each of {@code lines} may instead be groups picked by condition ({@link Speech}, 0012). Required quests, and quests
+ * the conditions name, must exist, and requirements never lead back to the quest. Beyond that this checks only the
+ * shape; whether the items, entities, crops and NPCs exist is checked on publish, where the game's lists are available.
  */
 public final class QuestFormat {
 
@@ -100,6 +103,7 @@ public final class QuestFormat {
         List<Folders.Folder> folders = Folders.read(root.get("folders"), "quest document", errors);
         List<QuestDoc.Quest> quests = new ArrayList<>();
         Set<String> ids = new HashSet<>();
+        Set<String> stageIds = new HashSet<>();
         for (JsonElement el : (JsonArray) arr) {
             if (!el.isJsonObject()) {
                 errors.add("a quest is not an object");
@@ -126,15 +130,19 @@ public final class QuestFormat {
             }
             String text = string(o, "text");
             String folder = Folders.placement(o, folders, where, errors);
-            List<QuestDoc.Goal> goals = goals(o, where, errors);
-            int waitDays = waitDays(o.get("wait"), where, errors);
+            for (String moved : List.of("goals", "wait", "receiver")) {
+                if (o.has(moved)) {
+                    errors.add(where + ": '" + moved + "' belongs in a stage now (\"stages\": [ { … } ], see 0015)");
+                }
+            }
+            List<QuestDoc.Stage> stages = stages(o.get("stages"), where, stageIds, errors);
             List<QuestDoc.Stack> rewards = stacks(o, "rewards", ITEM_WITH_COMPONENTS, where, errors);
             List<QuestDoc.Stack> supplies = o.has("supplies")
                     ? stacks(o, "supplies", ITEM_WITH_COMPONENTS, where, errors) : List.of();
             QuestDoc.Flow flow = flow(o, where, errors);
             if (errors.size() == before) {
-                quests.add(new QuestDoc.Quest(id, title.trim(), icon, text == null ? "" : text, goals, waitDays, rewards,
-                        supplies, folder, flow));
+                quests.add(new QuestDoc.Quest(id, title.trim(), icon, text == null ? "" : text, rewards, supplies, folder,
+                        flow, stages));
             }
         }
         checkRequires(quests, ids, errors);
@@ -144,10 +152,9 @@ public final class QuestFormat {
         return new QuestDoc(folders, List.copyOf(quests));
     }
 
-    /** Who offers and receives a quest, what must be done first, and what the NPCs say. */
+    /** Who offers a quest, what must be done first, and what the giver says about taking it. */
     private static QuestDoc.Flow flow(JsonObject o, String where, List<String> errors) {
         String giver = npc(o, "giver", where, errors);
-        String receiver = npc(o, "receiver", where, errors);
         List<String> requires = new ArrayList<>();
         JsonElement r = o.get("requires");
         if (r != null && !r.isJsonArray()) {
@@ -164,7 +171,50 @@ public final class QuestFormat {
                 }
             }
         }
-        return new QuestDoc.Flow(giver, receiver, List.copyOf(requires), lines(o.get("lines"), where, errors));
+        List<Speech> lines = lines(o.get("lines"), LINE_KEYS, STAGE_LINE_KEYS, "a stage", where, errors);
+        return new QuestDoc.Flow(giver, List.copyOf(requires), new QuestDoc.Lines(lines.get(0), lines.get(1), lines.get(2)));
+    }
+
+    /**
+     * A quest's stages, in order: at least one. Each needs an id unique in the document
+     * ({@code seen} holds those so far) and a line of text saying what to do.
+     */
+    private static List<QuestDoc.Stage> stages(JsonElement e, String quest, Set<String> seen, List<String> errors) {
+        if (e == null || !e.isJsonArray() || e.getAsJsonArray().isEmpty()) {
+            errors.add(quest + ": needs a 'stages' list with at least one stage");
+            return List.of();
+        }
+        List<QuestDoc.Stage> out = new ArrayList<>();
+        int n = 0;
+        for (JsonElement s : e.getAsJsonArray()) {
+            n++;
+            if (!s.isJsonObject()) {
+                errors.add(quest + ": stage " + n + " is not an object");
+                continue;
+            }
+            JsonObject o = s.getAsJsonObject();
+            String text = optional(o, "text");
+            String where = quest + " stage " + n + (text.isEmpty() ? "" : " '" + text + "'");
+            int before = errors.size();
+            String id = string(o, "id");
+            if (!Ids.valid(Ids.STAGE, id)) {
+                errors.add(where + ": id " + (id == null ? "is missing" : "'" + id + "' " + Ids.rule(Ids.STAGE)));
+            } else if (!seen.add(id)) {
+                errors.add(where + ": duplicate stage id '" + id + "'");
+            }
+            if (text.isEmpty()) {
+                errors.add(where + ": missing 'text' (what to do, shown in the quest screen)");
+            }
+            String to = npc(o, "to", where, errors);
+            List<QuestDoc.Goal> goals = o.has("goals") ? goals(o, where, errors) : List.of();
+            int waitDays = waitDays(o.get("wait"), where, errors);
+            List<Speech> lines = lines(o.get("lines"), STAGE_LINE_KEYS, LINE_KEYS, "the quest", where, errors);
+            if (errors.size() == before) {
+                out.add(new QuestDoc.Stage(id, text, to, goals, waitDays, new QuestDoc.StageLines(
+                        lines.get(0), lines.get(1), lines.get(2), lines.get(3), lines.get(4))));
+            }
+        }
+        return List.copyOf(out);
     }
 
     private static String npc(JsonObject o, String key, String where, List<String> errors) {
@@ -175,33 +225,39 @@ public final class QuestFormat {
         return id;
     }
 
-    /** The keys of {@code lines}. Never rename: they are saved. */
-    private static final List<String> LINE_KEYS = List.of("offer", "accepted", "declined", "active", "complete",
-            "handed", "waiting", "ready");
+    /** The keys of a quest's {@code lines}, in {@link QuestDoc.Lines#all()} order. Never rename: they are saved. */
+    private static final List<String> LINE_KEYS = List.of("offer", "accepted", "declined");
 
-    private static QuestDoc.Lines lines(JsonElement e, String where, List<String> errors) {
-        if (e == null) {
-            return QuestDoc.Lines.NONE;
-        }
-        if (!e.isJsonObject()) {
+    /** The keys of a stage's {@code lines}, in {@link QuestDoc.StageLines#all()} order. Never rename: they are saved. */
+    private static final List<String> STAGE_LINE_KEYS = List.of("active", "complete", "handed", "waiting", "ready");
+
+    /**
+     * Lines under {@code keys}, in their order ({@link Speech#NONE} for those not written).
+     *
+     * @param elsewhere     the keys that belong to the other place (quest or stage), to say so
+     * @param elsewhereName that place, for the message: "a stage" or "the quest"
+     */
+    private static List<Speech> lines(JsonElement e, List<String> keys, List<String> elsewhere, String elsewhereName,
+                                      String where, List<String> errors) {
+        List<Speech> out = new ArrayList<>();
+        JsonObject o = new JsonObject();
+        if (e != null && !e.isJsonObject()) {
             errors.add(where + ": 'lines' is not an object");
-            return QuestDoc.Lines.NONE;
+        } else if (e != null) {
+            o = e.getAsJsonObject();
         }
-        JsonObject o = e.getAsJsonObject();
         for (String key : o.keySet()) {
-            if (!LINE_KEYS.contains(key)) {
-                errors.add(where + ": unknown lines '" + key + "' (use " + String.join(", ", LINE_KEYS) + ")");
+            if (elsewhere.contains(key)) {
+                errors.add(where + ": lines '" + key + "' belong in " + elsewhereName
+                        + " (here: " + String.join(", ", keys) + ")");
+            } else if (!keys.contains(key)) {
+                errors.add(where + ": unknown lines '" + key + "' (use " + String.join(", ", keys) + ")");
             }
         }
-        return new QuestDoc.Lines(
-                Speech.read(o.get("offer"), true, where + " offer", errors),
-                Speech.read(o.get("accepted"), true, where + " accepted", errors),
-                Speech.read(o.get("declined"), true, where + " declined", errors),
-                Speech.read(o.get("active"), true, where + " active", errors),
-                Speech.read(o.get("complete"), true, where + " complete", errors),
-                Speech.read(o.get("handed"), true, where + " handed", errors),
-                Speech.read(o.get("waiting"), true, where + " waiting", errors),
-                Speech.read(o.get("ready"), true, where + " ready", errors));
+        for (String key : keys) {
+            out.add(Speech.read(o.get(key), true, where + " " + key, errors));
+        }
+        return out;
     }
 
     /**
@@ -220,17 +276,27 @@ public final class QuestFormat {
                     errors.add(where + " requires quest '" + r + "' that does not exist");
                 }
             }
-            for (int i = 0; i < LINE_KEYS.size(); i++) {
-                for (String named : q.flow().lines().all().get(i).questsNamed()) {
-                    if (!ids.contains(named)) {
-                        errors.add(where + " " + LINE_KEYS.get(i) + ": quest '" + named + "' does not exist");
-                    }
-                }
+            namesQuestsThatExist(q.flow().lines().all(), LINE_KEYS, where, ids, errors);
+            for (int n = 0; n < q.stages().size(); n++) {
+                QuestDoc.Stage s = q.stages().get(n);
+                namesQuestsThatExist(s.lines().all(), STAGE_LINE_KEYS, where + " stage " + (n + 1) + " '" + s.text() + "'",
+                        ids, errors);
             }
         }
         for (QuestDoc.Quest q : quests) {
             if (!q.flow().requires().contains(q.id()) && leadsBack(q.id(), requires)) {
                 errors.add(Ids.named("quest", q.id(), q.title()) + " ends up requiring itself");
+            }
+        }
+    }
+
+    private static void namesQuestsThatExist(List<Speech> lines, List<String> keys, String where, Set<String> ids,
+                                             List<String> errors) {
+        for (int i = 0; i < keys.size(); i++) {
+            for (String named : lines.get(i).questsNamed()) {
+                if (!ids.contains(named)) {
+                    errors.add(where + " " + keys.get(i) + ": quest '" + named + "' does not exist");
+                }
             }
         }
     }
@@ -265,13 +331,13 @@ public final class QuestFormat {
      * {@code /clear} reads it), {@code kill} (an entity type id), {@code harvest} (a
      * crop block id), {@code breed} (an entity type id) or {@code collect} (an item that drops, with {@code from}
      * and an optional {@code chance}). Counted goals of one kind must name different targets, because
-     * progress is saved per kind and target; collect goals of one quest must name different items, because
-     * the quest's items are told apart by item.
+     * progress is saved per kind and target; collect goals of one stage must name different items, because
+     * the quest's items are told apart by item (stages go one at a time, so each may name the same item, 0015).
      */
     private static List<QuestDoc.Goal> goals(JsonObject o, String where, List<String> errors) {
         JsonElement e = o.get("goals");
         if (e == null || !e.isJsonArray()) {
-            errors.add(where + ": missing 'goals' list");
+            errors.add(where + ": 'goals' is not a list");
             return List.of();
         }
         List<QuestDoc.Goal> out = new ArrayList<>();
@@ -414,25 +480,9 @@ public final class QuestFormat {
             if (!q.supplies().isEmpty()) {
                 o.add("supplies", writeStacks(q.supplies()));
             }
-            JsonArray goals = new JsonArray();
-            for (QuestDoc.Goal g : q.goals()) {
-                JsonObject go = new JsonObject();
-                go.addProperty(g.kind().key, g.target());
-                go.add("count", new JsonPrimitive(g.count()));
-                if (g.kind() == QuestDoc.Goal.Kind.COLLECT) {
-                    go.addProperty("from", g.from());
-                    if (g.chance() < 1) {
-                        go.addProperty("chance", g.chance());
-                    }
-                }
-                goals.add(go);
-            }
-            o.add("goals", goals);
-            if (q.waitDays() > 0) {
-                JsonObject wait = new JsonObject();
-                wait.add("days", new JsonPrimitive(q.waitDays()));
-                o.add("wait", wait);
-            }
+            JsonArray stages = new JsonArray();
+            q.stages().forEach(s -> stages.add(writeStage(s)));
+            o.add("stages", stages);
             o.add("rewards", writeStacks(q.rewards()));
             arr.add(o);
         }
@@ -448,20 +498,52 @@ public final class QuestFormat {
         if (!flow.giver().isEmpty()) {
             o.addProperty("giver", flow.giver());
         }
-        if (!flow.receiver().isEmpty()) {
-            o.addProperty("receiver", flow.receiver());
-        }
         if (!flow.requires().isEmpty()) {
             JsonArray requires = new JsonArray();
             flow.requires().forEach(requires::add);
             o.add("requires", requires);
         }
+        writeLines(o, flow.lines().all(), LINE_KEYS);
+    }
+
+    /** A stage, with only the optional parts that are set. */
+    private static JsonObject writeStage(QuestDoc.Stage s) {
+        JsonObject o = new JsonObject();
+        o.addProperty("id", s.id());
+        o.addProperty("text", s.text());
+        if (!s.to().isEmpty()) {
+            o.addProperty("to", s.to());
+        }
+        if (!s.goals().isEmpty()) {
+            JsonArray goals = new JsonArray();
+            for (QuestDoc.Goal g : s.goals()) {
+                JsonObject go = new JsonObject();
+                go.addProperty(g.kind().key, g.target());
+                go.add("count", new JsonPrimitive(g.count()));
+                if (g.kind() == QuestDoc.Goal.Kind.COLLECT) {
+                    go.addProperty("from", g.from());
+                    if (g.chance() < 1) {
+                        go.addProperty("chance", g.chance());
+                    }
+                }
+                goals.add(go);
+            }
+            o.add("goals", goals);
+        }
+        if (s.waitDays() > 0) {
+            JsonObject wait = new JsonObject();
+            wait.add("days", new JsonPrimitive(s.waitDays()));
+            o.add("wait", wait);
+        }
+        writeLines(o, s.lines().all(), STAGE_LINE_KEYS);
+        return o;
+    }
+
+    private static void writeLines(JsonObject o, List<Speech> all, List<String> keys) {
         JsonObject lines = new JsonObject();
-        QuestDoc.Lines l = flow.lines();
-        List<Speech> all = l.all();
-        for (int i = 0; i < LINE_KEYS.size(); i++) {
+        for (int i = 0; i < keys.size(); i++) {
             if (!all.get(i).isEmpty()) {
-                lines.add(LINE_KEYS.get(i), Speech.write(all.get(i)));
+                lines.add(keys.get(i), Speech.write(all.get(i)));
             }
         }
         if (lines.size() > 0) {

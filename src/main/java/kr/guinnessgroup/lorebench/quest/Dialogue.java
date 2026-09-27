@@ -39,34 +39,46 @@ public final class Dialogue {
         }
     }
 
-    public record Entry(Kind kind, QuestDoc.Quest quest) {}
+    /**
+     * @param stage the stage it is about: the player's, or the first for an offer (0015)
+     */
+    public record Entry(Kind kind, QuestDoc.Quest quest, QuestDoc.Stage stage) {}
 
     private Dialogue() {}
 
     /**
      * Everything this NPC can talk about with the player, in {@link Kind}'s order, each kind
-     * in the quest document's order.
+     * in the quest document's order. A quest in progress is talked about with its stage's NPC.
      *
-     * @param state    the player's state of a quest, by id (READY when an active quest's goals are met,
-     *                 or a waiting quest's wait is over)
-     * @param handedIn whether the player has handed a quest in, by id (it is waiting, or ready to take)
+     * @param state    the player's state of a quest, by id (READY when an active stage's goals are met,
+     *                 or a waiting stage's wait is over)
+     * @param handedIn whether the player has handed a quest's stage in, by id (it is waiting, or ready to take)
+     * @param stage    the stage of a quest the player is on (asked only of quests they are on), or
+     *                 {@code null} if the quest no longer has theirs (then no NPC talks about it)
      */
     public static List<Entry> plan(String npcId, List<QuestDoc.Quest> quests, Function<String, QuestState> state,
-                                   Predicate<String> handedIn) {
+                                   Predicate<String> handedIn, Function<QuestDoc.Quest, QuestDoc.Stage> stage) {
         List<Entry> entries = new ArrayList<>();
         for (QuestDoc.Quest q : quests) {
             QuestDoc.Flow flow = q.flow();
-            boolean handsInHere = npcId.equals(flow.handInTo());
             QuestState s = state.apply(q.id());
+            if (s == QuestState.HIDDEN) {
+                if (npcId.equals(flow.giver()) && flow.requires().stream().allMatch(r -> state.apply(r) == QuestState.DONE)) {
+                    entries.add(new Entry(Kind.OFFER, q, q.stages().getFirst()));
+                }
+                continue;
+            }
+            QuestDoc.Stage at = s == QuestState.DONE ? null : stage.apply(q);
+            if (at == null) {
+                continue;
+            }
+            boolean handsInHere = npcId.equals(q.npcOf(at));
             if (s == QuestState.READY && handsInHere) {
-                entries.add(new Entry(handedIn.test(q.id()) ? Kind.TAKE : Kind.READY, q));
-            } else if (s == QuestState.HIDDEN && npcId.equals(flow.giver())
-                    && flow.requires().stream().allMatch(r -> state.apply(r) == QuestState.DONE)) {
-                entries.add(new Entry(Kind.OFFER, q));
+                entries.add(new Entry(handedIn.test(q.id()) ? Kind.TAKE : Kind.READY, q, at));
             } else if (s == QuestState.ACTIVE && handsInHere) {
-                entries.add(new Entry(Kind.ACTIVE, q));
+                entries.add(new Entry(Kind.ACTIVE, q, at));
             } else if (s == QuestState.WAITING && handsInHere) {
-                entries.add(new Entry(Kind.WAITING, q));
+                entries.add(new Entry(Kind.WAITING, q, at));
             }
         }
         entries.sort(Comparator.comparing(Entry::kind)); // stable: keeps the document's order within a kind
@@ -80,11 +92,11 @@ public final class Dialogue {
 
     /** What the NPC says for an entry, before picking by condition ({@link Speech#pick}). */
     public static Speech lines(Entry entry) {
-        QuestDoc.Lines lines = entry.quest().flow().lines();
+        QuestDoc.StageLines lines = entry.stage().lines();
         return switch (entry.kind()) {
             case READY -> lines.complete();
             case TAKE -> lines.ready();
-            case OFFER -> lines.offer();
+            case OFFER -> entry.quest().flow().lines().offer();
             case ACTIVE -> lines.active();
             case WAITING -> lines.waiting();
         };

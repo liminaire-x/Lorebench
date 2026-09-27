@@ -21,13 +21,14 @@ import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.block.Block;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 
 /**
- * A quest's needs and rewards as the quest screen and the dialogue show them, with
- * the items read once per screen. Progress comes from this player's inventory and
- * the counts (kills, harvests, babies) the server sent.
+ * A quest's needs (its stage's goals, 0015) and rewards as the quest screen and the dialogue
+ * show them, with the items read once per screen. Progress comes from this player's inventory
+ * and the counts (kills, harvests, babies) the server sent.
  */
 final class QuestCard {
 
@@ -47,8 +48,9 @@ final class QuestCard {
         if (supplies && !q.supplies().isEmpty()) {
             h += 6 + font.lineHeight + 2 + q.supplies().size() * ROW_H;
         }
-        if (needs && !q.goals().isEmpty()) {
-            h += 6 + font.lineHeight + 2 + q.goals().size() * ROW_H;
+        List<QuestDoc.Goal> goals = goals(q);
+        if (needs && !goals.isEmpty()) {
+            h += 6 + font.lineHeight + 2 + goals.size() * ROW_H;
         }
         if (!q.rewards().isEmpty()) {
             h += 4 + font.lineHeight + 2 + q.rewards().size() * ROW_H;
@@ -58,6 +60,7 @@ final class QuestCard {
 
     /**
      * Needs and rewards from {@code y} down, after what accepting gives when {@code supplies} is on.
+     * The needs are the goals of the stage the player is on (the last one the server sent).
      *
      * @param progress     this player's counted progress, by {@link QuestDoc.Goal#progressKey()}
      * @param showProgress show "3/10" from this player's inventory and progress; off shows "× 10"
@@ -79,11 +82,12 @@ final class QuestCard {
                 y += ROW_H;
             }
         }
-        if (needs && !q.goals().isEmpty()) {
+        List<QuestDoc.Goal> goals = goals(q);
+        if (needs && !goals.isEmpty()) {
             y += 6;
             g.drawString(font, Component.translatable("lorebench.quests.needs"), x, y, GRAY);
             y += font.lineHeight + 2;
-            for (QuestDoc.Goal goal : q.goals()) {
+            for (QuestDoc.Goal goal : goals) {
                 ItemStack icon = goalIcon(goal);
                 Component name = switch (goal.kind()) {
                     case KILL, BREED -> entityName(goal.target());
@@ -185,12 +189,21 @@ final class QuestCard {
                 : Quests.stack(s, minecraft.player.registryAccess()));
     }
 
-    /** The list icon: the quest's icon, else its first goal's icon, else a book. */
+    /** The goals of the stage the player is on, or none if the server sent no stage. */
+    private static List<QuestDoc.Goal> goals(QuestDoc.Quest q) {
+        return q.current() == null ? List.of() : q.current().goals();
+    }
+
+    /**
+     * The list icon: the quest's icon, else its first stage's first goal's icon (so it stays
+     * the same from stage to stage), else a book.
+     */
     ItemStack icon(QuestDoc.Quest q) {
         if (!q.icon().isEmpty()) {
             return new ItemStack(Quests.item(q.icon()));
         }
-        ItemStack first = q.goals().isEmpty() ? ItemStack.EMPTY : goalIcon(q.goals().get(0));
-        return first.isEmpty() ? new ItemStack(Items.BOOK) : first;
+        List<QuestDoc.Goal> first = q.stages().isEmpty() ? List.of() : q.stages().getFirst().goals();
+        ItemStack stack = first.isEmpty() ? ItemStack.EMPTY : goalIcon(first.getFirst());
+        return stack.isEmpty() ? new ItemStack(Items.BOOK) : stack;
     }
 }

@@ -184,8 +184,9 @@ public final class LorebenchWebServer {
 
     /**
      * {@code {"players": [{"uuid", "name", "online", "state": "hidden|active|waiting|ready|done", "progress": {...},
-     * "timesDeclined", "handedDay"}]}}: everyone on the quest, done with it or who turned it down, online or not.
-     * {@code handedDay} only while they wait (0013).
+     * "timesDeclined", "handedDay", "stage"}]}}: everyone on the quest, done with it or who turned it down, online or not.
+     * {@code handedDay} only while they wait (0013); {@code stage} (the id of theirs, which the quest may no longer
+     * have) only while they are on it (0015).
      */
     private static String questPlayers(MinecraftServer mc, String questId) {
         Quests quests = Quests.current();
@@ -205,6 +206,9 @@ public final class LorebenchWebServer {
             p.addProperty("timesDeclined", s.timesDeclined());
             if (s.handedDay() >= 0) {
                 p.addProperty("handedDay", s.handedDay());
+            }
+            if (!s.stage().isEmpty()) {
+                p.addProperty("stage", s.stage());
             }
             list.add(p);
         }

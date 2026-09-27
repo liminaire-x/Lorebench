@@ -9,6 +9,7 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+import com.mojang.logging.LogUtils;
 import kr.guinnessgroup.lorebench.record.Owner;
 import kr.guinnessgroup.lorebench.record.RecordStore;
 import kr.guinnessgroup.lorebench.runtime.LorebenchRuntime;
@@ -42,6 +43,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
+import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -67,6 +69,8 @@ import java.util.function.Predicate;
  * match, others are ignored). See docs/decisions/0006-item-syntax.md.
  */
 public final class Quests {
+
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     private static volatile Quests current;
 
@@ -109,17 +113,30 @@ public final class Quests {
         Owner owner = Owner.player(player.getUUID());
         QuestState stored = QuestState.fromRecord(records.get(owner, questId));
         QuestDoc.Quest quest = runtime.quest(questId);
-        if (quest == null) {
-            return stored;
+        QuestDoc.Stage stage = quest == null ? null : stage(owner, quest);
+        if (stage == null) {
+            return stored; // a removed quest, or a removed stage: the player waits where they are (0015)
         }
         if (stored == QuestState.ACTIVE
-                && goalsMet(player.getInventory(), progress(owner, questId), quest, s -> condition(player, s))) {
+                && goalsMet(player.getInventory(), progress(owner, questId), quest, stage, s -> condition(player, s))) {
             return QuestState.READY;
         }
-        if (stored == QuestState.WAITING && waitOver(owner, quest, today(player.server))) {
+        if (stored == QuestState.WAITING && waitOver(owner, quest, stage, today(player.server))) {
             return QuestState.READY;
         }
         return stored;
+    }
+
+    /**
+     * The stage of the quest the player is on (0015): the first before they have one, or
+     * {@code null} if the quest no longer has theirs. A done quest has none of its own.
+     */
+    public QuestDoc.Stage stage(ServerPlayer player, QuestDoc.Quest quest) {
+        return stage(Owner.player(player.getUUID()), quest);
+    }
+
+    private QuestDoc.Stage stage(Owner owner, QuestDoc.Quest quest) {
+        return QuestStages.of(quest, records.get(owner, QuestStages.key(quest.id())));
     }
 
     /** Whether the player has handed the quest's goals in and waits for, or can take, the rewards. */
@@ -127,8 +144,8 @@ public final class Quests {
         return QuestState.fromRecord(records.get(Owner.player(player.getUUID()), questId)) == QuestState.WAITING;
     }
 
-    private boolean waitOver(Owner owner, QuestDoc.Quest quest, long today) {
-        return QuestWaits.over(records.get(owner, QuestWaits.key(quest.id())), quest.waitDays(), today);
+    private boolean waitOver(Owner owner, QuestDoc.Quest quest, QuestDoc.Stage stage, long today) {
+        return QuestWaits.over(records.get(owner, QuestWaits.key(quest.id())), stage.waitDays(), today);
     }
 
     /** The game's day number now, as F3 shows it: it turns at 6:00 in the morning, and on waking up (0013). */
@@ -180,17 +197,19 @@ public final class Quests {
     }
 
     /**
-     * For each active quest of the player's with a collect goal from {@code from}, by its
-     * chance: one of its items, marked for them, drops where {@code source} was, seen and
+     * For each active quest of the player's whose stage has a collect goal from {@code from}, by
+     * its chance: one of its items, marked for them, drops where {@code source} was, seen and
      * picked up by them only. None while they already carry enough (0012).
      */
     private void dropQuestItems(ServerPlayer player, Entity source, String from) {
         Owner owner = Owner.player(player.getUUID());
         for (QuestDoc.Quest q : runtime.quests()) {
-            if (QuestState.fromRecord(records.get(owner, q.id())) != QuestState.ACTIVE) {
+            QuestDoc.Stage stage = QuestState.fromRecord(records.get(owner, q.id())) == QuestState.ACTIVE
+                    ? stage(owner, q) : null;
+            if (stage == null) {
                 continue;
             }
-            for (QuestDoc.Goal goal : q.goals()) {
+            for (QuestDoc.Goal goal : stage.goals()) {
                 if (goal.kind() != QuestDoc.Goal.Kind.COLLECT || !goal.from().equals(from)
                         || count(player.getInventory(), QuestItems.of(goal, q.id(), player.getUUID())) >= goal.count()
                         || player.getRandom().nextDouble() >= goal.chance()) {
@@ -224,18 +243,20 @@ public final class Quests {
     }
 
     /**
-     * Count one toward every active quest of the player's with a {@code kind} goal for
-     * {@code target}, up to the goal's count.
+     * Count one toward every active quest of the player's whose stage has a {@code kind} goal
+     * for {@code target}, up to the goal's count.
      */
     private void tally(ServerPlayer player, QuestDoc.Goal.Kind kind, String target) {
         Owner owner = Owner.player(player.getUUID());
         String key = QuestDoc.Goal.progressKey(kind, target);
         boolean changed = false;
         for (QuestDoc.Quest q : runtime.quests()) {
-            if (QuestState.fromRecord(records.get(owner, q.id())) != QuestState.ACTIVE) {
+            QuestDoc.Stage stage = QuestState.fromRecord(records.get(owner, q.id())) == QuestState.ACTIVE
+                    ? stage(owner, q) : null;
+            if (stage == null) {
                 continue;
             }
-            for (QuestDoc.Goal goal : q.goals()) {
+            for (QuestDoc.Goal goal : stage.goals()) {
                 if (goal.kind() != kind || !goal.target().equals(target)) {
                     continue;
                 }
@@ -254,9 +275,9 @@ public final class Quests {
     }
 
     /**
-     * Show a hidden quest to the player (it becomes active) and give its supplies, once:
-     * whether they accepted it in dialogue or a graph revealed it. Does nothing if already
-     * revealed. Supplies that do not fit drop at the player's feet.
+     * Show a hidden quest to the player (it becomes active, at its first stage) and give its
+     * supplies, once: whether they accepted it in dialogue or a graph revealed it. Does nothing
+     * if already revealed. Supplies that do not fit drop at the player's feet.
      */
     public void reveal(ServerPlayer player, String questId) {
         Owner owner = Owner.player(player.getUUID());
@@ -264,6 +285,7 @@ public final class Quests {
             return;
         }
         records.set(owner, questId, QuestState.ACTIVE_VALUE);
+        records.set(owner, QuestStages.key(questId), null); // no stage = the first
         QuestDoc.Quest quest = runtime.quest(questId);
         if (quest != null) {
             for (QuestDoc.Stack supply : quest.supplies()) {
@@ -291,11 +313,11 @@ public final class Quests {
     }
 
     /**
-     * One step on with a ready quest, all at once on the server thread. Handing it in takes
-     * the goal items and drops its progress; then a quest with a wait records the day and
-     * waits (0013), any other gives the rewards and is done. A waiting quest whose wait is
-     * over gives the rewards and is done. Rewards that do not fit drop at the player's feet
-     * (like {@code /give}).
+     * One step on with a ready quest's stage, all at once on the server thread. Handing it in
+     * takes the goal items and drops the stage's progress; then a stage with a wait records the
+     * day and waits (0013), any other is done. A waiting stage whose wait is over is done. A done
+     * stage moves the player to the next one, from nothing (0015); the last gives the rewards and
+     * the quest is done. Rewards that do not fit drop at the player's feet (like {@code /give}).
      *
      * @return false (and nothing changes) if the quest is not ready for this player
      */
@@ -305,9 +327,10 @@ public final class Quests {
             return false;
         }
         Owner owner = Owner.player(player.getUUID());
+        QuestDoc.Stage stage = stage(owner, quest); // there is one: the quest is ready
         if (!handedIn(player, questId)) {
             Inventory inventory = player.getInventory();
-            for (QuestDoc.Goal goal : quest.goals()) {
+            for (QuestDoc.Goal goal : stage.goals()) {
                 if (goal.kind() == QuestDoc.Goal.Kind.ITEM) {
                     take(inventory, condition(player, goal.target()), goal.count());
                 } else if (goal.kind() == QuestDoc.Goal.Kind.COLLECT) {
@@ -315,18 +338,26 @@ public final class Quests {
                 }
             }
             records.set(owner, QuestProgress.key(questId), null);
-            if (quest.waitDays() > 0) {
+            if (stage.waitDays() > 0) {
                 records.set(owner, questId, QuestState.WAITING_VALUE);
                 records.set(owner, QuestWaits.key(questId), QuestWaits.write(today(player.server)));
                 sync(player);
                 return true;
             }
         }
+        records.set(owner, QuestWaits.key(questId), null);
+        QuestDoc.Stage next = quest.after(stage);
+        if (next != null) {
+            records.set(owner, questId, QuestState.ACTIVE_VALUE);
+            records.set(owner, QuestStages.key(questId), next.id());
+            sync(player);
+            return true;
+        }
         for (QuestDoc.Stack reward : quest.rewards()) {
             give(player, stack(reward.item(), player.registryAccess()), reward.count());
         }
         records.set(owner, questId, QuestState.DONE_VALUE);
-        records.set(owner, QuestWaits.key(questId), null);
+        records.set(owner, QuestStages.key(questId), null);
         sync(player);
         return true;
     }
@@ -378,13 +409,16 @@ public final class Quests {
      * @param progress their counted progress ({@link QuestDoc.Goal#progressKey()})
      * @param timesDeclined how many times they turned it down
      * @param handedDay the day they handed it in to wait (0013), or -1
+     * @param stage    the id of the stage they are on while on the quest (0015), which the quest may no
+     *                 longer have; "" when they are not on it
      */
     public record Standing(UUID player, String name, boolean online, QuestState state, Map<String, Integer> progress,
-                           int timesDeclined, long handedDay) {}
+                           int timesDeclined, long handedDay, String stage) {}
 
     /** Everyone who is on this quest, has done it or has turned it down, online or not, by name. Server thread. */
     public List<Standing> standings(MinecraftServer server, String questId) {
         List<Standing> out = new ArrayList<>();
+        QuestDoc.Quest quest = runtime.quest(questId);
         Set<Owner> owners = new LinkedHashSet<>(records.ownersWith(Owner.Kind.PLAYER, questId));
         owners.addAll(records.ownersWith(Owner.Kind.PLAYER, QuestDeclines.key(questId)));
         for (Owner owner : owners) {
@@ -396,20 +430,25 @@ public final class Quests {
             }
             ServerPlayer online = server.getPlayerList().getPlayer(uuid);
             String handed = records.peek(owner, QuestWaits.key(questId));
+            String storedStage = records.peek(owner, QuestStages.key(questId));
             QuestState state;
             if (online != null) {
                 state = state(online, questId);
             } else {
                 state = QuestState.fromRecord(records.peek(owner, questId));
-                QuestDoc.Quest quest = runtime.quest(questId);
-                if (state == QuestState.WAITING && quest != null && QuestWaits.over(handed, quest.waitDays(), today(server))) {
+                QuestDoc.Stage stage = quest == null ? null : QuestStages.of(quest, storedStage);
+                if (state == QuestState.WAITING && stage != null && QuestWaits.over(handed, stage.waitDays(), today(server))) {
                     state = QuestState.READY;
                 }
             }
             Map<String, Integer> progress = QuestProgress.read(records.peek(owner, QuestProgress.key(questId)));
             int declined = QuestDeclines.read(records.peek(owner, QuestDeclines.key(questId)));
+            String stageId = "";
+            if (state != QuestState.HIDDEN && state != QuestState.DONE && quest != null) {
+                stageId = storedStage != null ? storedStage : quest.stages().getFirst().id();
+            }
             out.add(new Standing(uuid, name(server, uuid, online), online != null, state, progress, declined,
-                    QuestWaits.read(handed)));
+                    QuestWaits.read(handed), stageId));
         }
         out.sort(Comparator.comparing(Standing::name, String.CASE_INSENSITIVE_ORDER));
         return out;
@@ -425,7 +464,7 @@ public final class Quests {
     }
 
     /**
-     * Take a player back to before a quest, online or not: no state, no progress, no
+     * Take a player back to before a quest, online or not: no state, no stage, no progress, no
      * refusals and no wait, so it is offered again as the first time and its supplies are given again on
      * accepting. What they were already given (supplies, rewards) stays theirs. Other quests
      * are left alone.
@@ -433,6 +472,7 @@ public final class Quests {
     public void forget(MinecraftServer server, UUID uuid, String questId) {
         Owner owner = Owner.player(uuid);
         records.setAny(owner, questId, null);
+        records.setAny(owner, QuestStages.key(questId), null);
         records.setAny(owner, QuestProgress.key(questId), null);
         records.setAny(owner, QuestDeclines.key(questId), null);
         records.setAny(owner, QuestWaits.key(questId), null);
@@ -442,19 +482,30 @@ public final class Quests {
         }
     }
 
-    /** Send the player every quest revealed to them, and nothing else. */
+    /**
+     * Send the player every quest revealed to them, and nothing else: of each, the stages up to
+     * theirs (all of them once it is done), never those ahead (0015).
+     */
     public void sync(ServerPlayer player) {
         Owner owner = Owner.player(player.getUUID());
         long today = today(player.server);
         List<QuestSyncPayload.Entry> revealed = new ArrayList<>();
         for (QuestDoc.Quest q : runtime.quests()) {
             QuestState s = QuestState.fromRecord(records.get(owner, q.id()));
-            if (s == QuestState.WAITING && waitOver(owner, q, today)) {
+            if (s == QuestState.HIDDEN) {
+                continue;
+            }
+            QuestDoc.Stage stage = stage(owner, q);
+            if (s == QuestState.WAITING && stage != null && waitOver(owner, q, stage, today)) {
                 s = QuestState.READY; // the screen works out an active quest's "ready" from the inventory itself
             }
-            if (s != QuestState.HIDDEN) {
-                revealed.add(new QuestSyncPayload.Entry(q, s, progress(owner, q.id())));
+            if (s != QuestState.DONE && stage == null) {
+                LOGGER.warn("[Lorebench] {} is on stage '{}' of quest '{}', which it no longer has; "
+                                + "reset them in the editor", player.getGameProfile().getName(),
+                        records.get(owner, QuestStages.key(q.id())), q.id());
             }
+            int upTo = s == QuestState.DONE ? q.stages().size() - 1 : q.stages().indexOf(stage);
+            revealed.add(new QuestSyncPayload.Entry(q.upTo(upTo, true), s, progress(owner, q.id())));
         }
         PacketDistributor.sendToPlayer(player, new QuestSyncPayload(List.copyOf(revealed)));
     }
@@ -467,14 +518,15 @@ public final class Quests {
     }
 
     /**
-     * Whether every goal is met: items in the inventory, counted goals in {@code progress}.
-     * Both sides use this, so the screen agrees with the server.
+     * Whether every goal of the stage is met: items in the inventory, counted goals in
+     * {@code progress}. A stage without goals always is. Both sides use this, so the screen
+     * agrees with the server.
      *
      * @param condition a hand-in goal's item condition, from its text
      */
     public static boolean goalsMet(Inventory inventory, Map<String, Integer> progress, QuestDoc.Quest quest,
-                                   Function<String, Predicate<ItemStack>> condition) {
-        for (QuestDoc.Goal goal : quest.goals()) {
+                                   QuestDoc.Stage stage, Function<String, Predicate<ItemStack>> condition) {
+        for (QuestDoc.Goal goal : stage.goals()) {
             if (have(inventory, progress, quest, goal, condition) < goal.count()) {
                 return false;
             }

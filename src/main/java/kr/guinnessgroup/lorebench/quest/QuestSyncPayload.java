@@ -28,6 +28,8 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
     /**
      * A revealed quest, where the player is with it, and their counted progress so far.
      *
+     * @param quest the stages up to the player's (all once it is done, none if theirs was removed),
+     *              never those ahead; the last is the one they are on (0015)
      * @param state ACTIVE (the screen tells "ready" from the inventory itself), WAITING (handed in),
      *              READY (handed in and the wait is over: the rewards can be taken) or DONE
      */
@@ -41,7 +43,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // Handled on the client's main thread (the registrar's default).
-        event.registrar("5").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
+        event.registrar("6").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
     }
 
     @Override
@@ -70,8 +72,9 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
     }
 
     /**
-     * What a player's screen shows of a quest: id, title, icon, story, goals, rewards and supplies.
-     * Folders are for the editor only, and givers, lines and the wait stay on the server (dialogue
+     * What a player's screen shows of a quest: id, title, icon, story, rewards, supplies, and each
+     * stage given (the caller cuts them with {@link QuestDoc.Quest#upTo}) with what to do and its goals.
+     * Folders are for the editor only, and givers, NPCs, lines and waits stay on the server (dialogue
      * sends the lines it needs, the state says whether it is waiting), so they aren't sent.
      * Shared with {@link DialoguePayload}.
      */
@@ -80,19 +83,34 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
         buf.writeUtf(q.title());
         buf.writeUtf(q.icon());
         buf.writeUtf(q.text());
-        buf.writeVarInt(q.goals().size());
-        for (QuestDoc.Goal g : q.goals()) {
-            buf.writeEnum(g.kind());
-            buf.writeUtf(g.target());
-            buf.writeVarInt(g.count());
-        }
         writeStacks(buf, q.rewards());
         writeStacks(buf, q.supplies());
+        buf.writeVarInt(q.stages().size());
+        for (QuestDoc.Stage s : q.stages()) {
+            buf.writeUtf(s.id());
+            buf.writeUtf(s.text());
+            buf.writeVarInt(s.goals().size());
+            for (QuestDoc.Goal g : s.goals()) {
+                buf.writeEnum(g.kind());
+                buf.writeUtf(g.target());
+                buf.writeVarInt(g.count());
+            }
+        }
     }
 
     static QuestDoc.Quest readQuest(FriendlyByteBuf buf) {
-        return new QuestDoc.Quest(buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(),
-                readGoals(buf), 0, readStacks(buf), readStacks(buf), "", QuestDoc.Flow.NONE);
+        String id = buf.readUtf();
+        String title = buf.readUtf();
+        String icon = buf.readUtf();
+        String text = buf.readUtf();
+        List<QuestDoc.Stack> rewards = readStacks(buf);
+        List<QuestDoc.Stack> supplies = readStacks(buf);
+        int n = buf.readVarInt();
+        List<QuestDoc.Stage> stages = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            stages.add(new QuestDoc.Stage(buf.readUtf(), buf.readUtf(), "", readGoals(buf), 0, QuestDoc.StageLines.NONE));
+        }
+        return new QuestDoc.Quest(id, title, icon, text, rewards, supplies, "", QuestDoc.Flow.NONE, List.copyOf(stages));
     }
 
     static void writeProgress(FriendlyByteBuf buf, Map<String, Integer> progress) {

@@ -31,13 +31,15 @@ import java.util.Map;
  * @param resume sent after the player accepted, declined or handed something in: carry on with
  *               the list instead of starting over
  * @param said   with {@code resume}: what the NPC says first (a quest's lines for right after
- *               accepting or declining it, or handing it in to wait), or empty
+ *               accepting or declining it, or handing a stage in), or empty
  */
 public record DialoguePayload(String npcName, int npcEntity, NpcDoc.Voice voice, List<DialogueLines.Line> greeting,
                               List<Entry> entries, boolean resume, List<DialogueLines.Line> said)
         implements CustomPacketPayload {
 
     /**
+     * @param quest the stages up to the one it is about (the first for an offer), never those ahead,
+     *              and the rewards only for an offer or the last stage, whose hand-in gives them (0015)
      * @param lines what the NPC says about it (offer, in progress or hand-in lines)
      * @param progress the player's counted progress ({@link QuestDoc.Goal#progressKey()})
      */
@@ -51,7 +53,7 @@ public record DialoguePayload(String npcName, int npcEntity, NpcDoc.Voice voice,
 
     /** Registers both dialogue messages. Handled on the main thread (the registrar's default). */
     public static void register(RegisterPayloadHandlersEvent event) {
-        event.registrar("8")
+        event.registrar("9")
                 .playToClient(TYPE, CODEC, (payload, context) -> ClientDialogue.accept(payload))
                 .playToServer(DialogueChoicePayload.TYPE, DialogueChoicePayload.CODEC, (choice, context) -> {
                     Dialogues dialogues = Dialogues.current();

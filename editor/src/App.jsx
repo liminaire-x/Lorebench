@@ -97,10 +97,16 @@ function tidyNpc(n) {
   return said.length ? { ...rest, greeting: said } : rest
 }
 
-function tidyQuest(q) {
-  const { lines, ...rest } = q
+// A quest's lines and each of its stages' lines (0015).
+function tidyLines(thing) {
+  const { lines, ...rest } = thing
   const kept = Object.fromEntries(Object.entries(lines || {}).map(([k, v]) => [k, realSpeech(v)]).filter(([, v]) => v.length))
   return Object.keys(kept).length ? { ...rest, lines: kept } : rest
+}
+
+function tidyQuest(q) {
+  const tidy = tidyLines(q)
+  return q.stages ? { ...tidy, stages: q.stages.map(tidyLines) } : tidy
 }
 
 // --- node on the canvas ---
@@ -171,7 +177,7 @@ export default function App() {
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [npcs, setNpcs] = useState([]) // [{ id, name }]
   const [placements, setPlacements] = useState({}) // { npcId: [{ dim, x, y, z }] }
-  const [quests, setQuests] = useState([]) // server format: [{ id, title, icon?, text?, folder?, goals, rewards }]
+  const [quests, setQuests] = useState([]) // server format: [{ id, title, icon?, text?, folder?, stages, rewards }]
   // Each document keeps its own folders, server format: [{ id, name, parent? }]
   const [questFolders, setQuestFolders] = useState([])
   const [npcFolders, setNpcFolders] = useState([])

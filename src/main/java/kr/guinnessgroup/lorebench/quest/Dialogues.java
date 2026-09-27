@@ -119,11 +119,12 @@ public final class Dialogues {
                     said = runtime.quest(questId).flow().lines().declined().pick(facts(player, questId));
                 }
                 case HAND_IN -> {
+                    QuestDoc.Stage stage = quests.stage(player, runtime.quest(questId));
                     boolean handedBefore = quests.handedIn(player, questId);
-                    quests.complete(player, questId);
-                    if (!handedBefore && quests.handedIn(player, questId)) {
-                        // Handed in, and now it waits (0013).
-                        said = runtime.quest(questId).flow().lines().handed().pick(facts(player, questId));
+                    if (quests.complete(player, questId) && !handedBefore) {
+                        // Right after handing the stage in, whether it now waits (0013) or goes on (0015).
+                        // Taking what comes of a wait has no lines after it.
+                        said = stage.lines().handed().pick(facts(player, questId));
                     }
                 }
             }
@@ -137,7 +138,8 @@ public final class Dialogues {
     }
 
     private List<Dialogue.Entry> plan(ServerPlayer player, String npcId) {
-        return Dialogue.plan(npcId, runtime.quests(), id -> quests.state(player, id), id -> quests.handedIn(player, id));
+        return Dialogue.plan(npcId, runtime.quests(), id -> quests.state(player, id), id -> quests.handedIn(player, id),
+                q -> quests.stage(player, q));
     }
 
     /**
@@ -163,9 +165,13 @@ public final class Dialogues {
                       List<DialogueLines.Line> said) {
         List<DialoguePayload.Entry> entries = new ArrayList<>();
         for (Dialogue.Entry e : plan) {
-            String id = e.quest().id();
-            entries.add(new DialoguePayload.Entry(e.kind(), e.quest(), Dialogue.lines(e).pick(facts(player, id)),
-                    quests.progress(player, id)));
+            QuestDoc.Quest q = e.quest();
+            // The stages up to this one, never those ahead. An offer shows the rewards to win; a stage
+            // shows them only when handing it in gives them, as the last one (0015).
+            QuestDoc.Quest seen = q.upTo(q.stages().indexOf(e.stage()),
+                    e.kind() == Dialogue.Kind.OFFER || q.after(e.stage()) == null);
+            entries.add(new DialoguePayload.Entry(e.kind(), seen, Dialogue.lines(e).pick(facts(player, q.id())),
+                    quests.progress(player, q.id())));
         }
         // Only the picked lines are sent: the conditions stay on the server.
         List<DialogueLines.Line> greeting = def.greeting().pick(facts(player, null));

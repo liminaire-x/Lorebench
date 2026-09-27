@@ -19,8 +19,8 @@ import java.util.List;
 
 /**
  * Where the player is with a quest: leaves through hidden / active / waiting / ready / done.
- * "Ready" means active with every goal in the player's inventory right now, or handed
- * in and the wait is over (0013).
+ * "Ready" means active with every goal of the player's stage in their inventory right now, or
+ * handed in and the wait is over (0013). Which stage it is does not show here (0015).
  */
 public final class QuestStateSwitch implements NodeType {
 

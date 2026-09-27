@@ -10,6 +10,7 @@ import kr.guinnessgroup.lorebench.Ids;
 import kr.guinnessgroup.lorebench.Speech;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -25,62 +26,119 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
     public static final QuestDoc EMPTY = new QuestDoc(List.of(), List.of());
 
     /**
+     * What happens once (offer, refusal, rewards) and the stages the player goes through in
+     * order. See docs/decisions/0015-quest-stages.md.
+     *
      * @param id      stable; graphs and players' records refer to it
      * @param title   shown in the quest screen
-     * @param icon    item id shown in the quest list, or "" for the first goal's item
+     * @param icon    item id shown in the quest list, or "" for the first stage's first goal's item
      * @param text    the quest's story text, may be ""
-     * @param goals   all must be met, shown in this order
-     * @param waitDays game days between handing the goals in and taking the rewards, or 0 for none
-     *                 (the rewards come right away); see docs/decisions/0013-waiting.md
-     * @param rewards items given on completion
+     * @param rewards items given when the last stage is done
      * @param supplies items given once, the moment the quest becomes active (seeds to plant,
      *                 a letter to deliver); see docs/decisions/0010-farming-goals.md
      * @param folder  the folder id it sits in, or "" for the top
-     * @param flow    who offers and receives it, what comes first, and what the NPCs say
+     * @param flow    who offers it, what comes first, and what the giver says
+     * @param stages  one or more, in order. On a client, only those up to the player's own
+     *                (see {@link #upTo})
      */
-    public record Quest(String id, String title, String icon, String text, List<Goal> goals, int waitDays,
-                        List<Stack> rewards, List<Stack> supplies, String folder, Flow flow) {}
+    public record Quest(String id, String title, String icon, String text, List<Stack> rewards, List<Stack> supplies,
+                        String folder, Flow flow, List<Stage> stages) {
 
-    /**
-     * How a quest runs through NPC dialogue. See docs/decisions/0009-quest-workbench.md.
-     *
-     * @param giver    the NPC id that offers it, or "" (then only graphs reveal it)
-     * @param receiver the NPC id it is handed in to, or "" for the giver
-     * @param requires quest ids that must all be done before it is offered
-     * @param lines    what the NPCs say
-     */
-    public record Flow(String giver, String receiver, List<String> requires, Lines lines) {
+        /** The stage with this id, or {@code null} if the quest has none (it was removed). */
+        public Stage stage(String stageId) {
+            for (Stage s : stages) {
+                if (s.id().equals(stageId)) {
+                    return s;
+                }
+            }
+            return null;
+        }
 
-        public static final Flow NONE = new Flow("", "", List.of(), Lines.NONE);
+        /** The stage after this one, or {@code null} if it is the last. */
+        public Stage after(Stage stage) {
+            int i = stages.indexOf(stage);
+            return i < 0 || i + 1 >= stages.size() ? null : stages.get(i + 1);
+        }
 
-        /** The NPC it is handed in to: the receiver, or the giver when none is set. */
-        public String handInTo() {
-            return receiver.isEmpty() ? giver : receiver;
+        /** The NPC a stage is done with: its own, or the giver when it names none. */
+        public String npcOf(Stage stage) {
+            return stage.to().isEmpty() ? flow.giver() : stage.to();
+        }
+
+        /**
+         * What a player's client may see: the stages up to the one at {@code last} (never those after it,
+         * so the story ahead never reaches them), with the rewards only when {@code rewards} is on.
+         */
+        public Quest upTo(int last, boolean rewards) {
+            return new Quest(id, title, icon, text, rewards ? this.rewards : List.of(), supplies, folder, flow,
+                    List.copyOf(stages.subList(0, Math.clamp(last + 1, 0, stages.size()))));
+        }
+
+        /** On a client: the stage the player is on (the last one sent), or {@code null} if none was sent. */
+        public Stage current() {
+            return stages.isEmpty() ? null : stages.getLast();
         }
     }
 
     /**
-     * What the NPCs say about a quest, each lines shown one page at a time, or groups of
-     * them picked by condition ({@link Speech}).
+     * One step of a quest: a thing to do and whom to see about it (0015).
+     *
+     * @param id       stable; players' records name the stage they are on by it
+     * @param text     what to do, a line in the quest screen
+     * @param to       the NPC id it is done with, or "" for the giver
+     * @param goals    all must be met, shown in this order; none = just talk to the NPC
+     * @param waitDays game days between handing the goals in and going on, or 0 for none;
+     *                 see docs/decisions/0013-waiting.md
+     * @param lines    what the NPC says during this stage
+     */
+    public record Stage(String id, String text, String to, List<Goal> goals, int waitDays, StageLines lines) {}
+
+    /**
+     * How a quest is offered. See docs/decisions/0009-quest-workbench.md.
+     *
+     * @param giver    the NPC id that offers it, or "" (then only graphs reveal it)
+     * @param requires quest ids that must all be done before it is offered
+     * @param lines    what the giver says about taking it
+     */
+    public record Flow(String giver, List<String> requires, Lines lines) {
+
+        public static final Flow NONE = new Flow("", List.of(), Lines.NONE);
+    }
+
+    /**
+     * What the giver says about taking a quest, each lines shown one page at a time, or
+     * groups of them picked by condition ({@link Speech}).
      *
      * @param offer    when the giver offers it
      * @param accepted right after the player accepts it (0010)
      * @param declined right after the player turns it down (0012)
-     * @param active   when the player talks to the receiver while it is in progress
-     * @param complete when the player hands it in
-     * @param handed   right after the player hands in a quest with a wait (0013)
-     * @param waiting  when the player talks to the receiver while waiting (0013)
-     * @param ready    when the wait is over, before the player takes the rewards (0013)
      */
-    public record Lines(Speech offer, Speech accepted, Speech declined, Speech active, Speech complete,
-                        Speech handed, Speech waiting, Speech ready) {
+    public record Lines(Speech offer, Speech accepted, Speech declined) {
 
-        public static final Lines NONE = new Lines(Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE,
-                Speech.NONE, Speech.NONE, Speech.NONE);
+        public static final Lines NONE = new Lines(Speech.NONE, Speech.NONE, Speech.NONE);
 
         /** In the order of their keys in the document. */
         public List<Speech> all() {
-            return List.of(offer, accepted, declined, active, complete, handed, waiting, ready);
+            return List.of(offer, accepted, declined);
+        }
+    }
+
+    /**
+     * What a stage's NPC says during it (0015).
+     *
+     * @param active   when the player talks to the NPC before the goals are met
+     * @param complete when the player hands the goals in (or, with none, just talks to the NPC)
+     * @param handed   right after handing in (0015 widened 0013's "to wait" to every stage)
+     * @param waiting  when the player talks to the NPC while waiting (0013)
+     * @param ready    when the wait is over, before the player takes what comes of it (0013)
+     */
+    public record StageLines(Speech active, Speech complete, Speech handed, Speech waiting, Speech ready) {
+
+        public static final StageLines NONE = new StageLines(Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE);
+
+        /** In the order of their keys in the document. */
+        public List<Speech> all() {
+            return List.of(active, complete, handed, waiting, ready);
         }
     }
 
@@ -169,11 +227,13 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
         }
     }
 
-    /** A problem for each quest whose giver or receiver is not one of {@code npcIds}. */
+    /** A problem for each giver or stage NPC that is not one of {@code npcIds}. */
     public List<String> npcErrors(Set<String> npcIds) {
         List<String> errors = new ArrayList<>();
         for (Quest q : quests) {
-            for (String npc : List.of(q.flow().giver(), q.flow().receiver())) {
+            List<String> npcs = new ArrayList<>(List.of(q.flow().giver()));
+            q.stages().forEach(s -> npcs.add(s.to()));
+            for (String npc : new LinkedHashSet<>(npcs)) {
                 if (!npc.isEmpty() && !npcIds.contains(npc)) {
                     errors.add(Ids.named("quest", q.id(), q.title()) + ": NPC '" + npc + "' does not exist");
                 }

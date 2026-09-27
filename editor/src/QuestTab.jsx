@@ -169,11 +169,20 @@ function QuestPlayers({ quest, setMessage }) {
   }, [quest.id, setMessage])
   useEffect(() => { setRows(null); load() }, [load])
 
-  // "2/3" for each counted goal (kill, harvest, breed), in the quest's order.
-  const counts = (progress) => (quest.goals || []).flatMap((g) => {
+  // "2/3" for each counted goal (kill, harvest, breed) of the stage they are on, in its order.
+  const counts = (p) => ((quest.stages || []).find((st) => st.id === p.stage)?.goals || []).flatMap((g) => {
     const k = ['kill', 'harvest', 'breed'].find((key) => g[key] !== undefined)
-    return k ? [`${Math.min(progress[`${k}:${g[k]}`] || 0, g.count)}/${g.count}`] : []
+    return k ? [`${Math.min(p.progress[`${k}:${g[k]}`] || 0, g.count)}/${g.count}`] : []
   }).join(' · ')
+
+  // The stage they are on (0015); one the quest no longer has stands out, to reset them.
+  const stageOf = (p) => {
+    if (!p.stage) return null
+    const i = (quest.stages || []).findIndex((st) => st.id === p.stage)
+    return i < 0
+      ? <span style={{ color: '#c0392b', marginLeft: 6 }}>on a removed stage ({p.stage})</span>
+      : <span style={{ ...hint, marginLeft: 6 }}>stage {i + 1}: {quest.stages[i].text || '(no text)'}</span>
+  }
 
   const reset = async (p) => {
     if (!window.confirm(`Take ${p.name} back to before "${quest.title}"?\n\nIt will be offered again as the first time (refusals and any wait forgotten), supplies are given again on accepting, and progress starts from 0. What they already got stays theirs.`)) return
@@ -198,7 +207,8 @@ function QuestPlayers({ quest, setMessage }) {
           <div key={p.uuid} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
             <span style={{ flex: 1 }}>
               {p.name}{!p.online && <span style={hint}> (offline)</span>}
-              <span style={{ ...hint, marginLeft: 6 }}>{stateText(p)}{p.state !== 'done' && counts(p.progress) ? ' · ' + counts(p.progress) : ''}{p.timesDeclined ? ` · declined ${p.timesDeclined}×` : ''}</span>
+              <span style={{ ...hint, marginLeft: 6 }}>{stateText(p)}{counts(p) ? ' · ' + counts(p) : ''}{p.timesDeclined ? ` · declined ${p.timesDeclined}×` : ''}</span>
+              {stageOf(p)}
             </span>
             <button onClick={() => reset(p)} style={{ cursor: 'pointer', color: '#c0392b' }}>Reset</button>
           </div>
@@ -218,6 +228,10 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
 
   const quest = selected?.kind === 'item' ? quests.find((q) => q.id === selected.id) || null : null
   const folder = selected?.kind === 'folder' ? folders.find((f) => f.id === selected.id) || null : null
+  // The stage being edited (0015): the chosen one, else the first.
+  const [stageId, setStageId] = useState(null)
+  const stages = quest?.stages || []
+  const stage = stages.find((st) => st.id === stageId) || stages[0] || null
 
   // Where "+ Folder" and "+ Quest" put the new thing: the chosen folder, or the chosen quest's folder.
   const target = folder?.id ?? quest?.folder ?? ''
@@ -248,7 +262,7 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
 
   // What the chosen player holds, as /give writes it; null (with a message) if none.
   const fetchHeld = useCallback(async () => {
-    if (!heldPlayer) { setMessage({ ok: false, text: 'Choose whose held item to use (above Needs).' }); return null }
+    if (!heldPlayer) { setMessage({ ok: false, text: 'Choose whose held item to use (✋ held item of, in the stage).' }); return null }
     try {
       const r = await fetch('/api/held-item?player=' + encodeURIComponent(heldPlayer)).then((res) => res.json())
       if (r.error) { setMessage({ ok: false, text: r.error }); return null }
@@ -268,28 +282,43 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
     const title = window.prompt('Quest title:')
     if (title == null || !title.trim()) return
     const id = newId('quest', quests.map((q) => q.id))
-    setQuests((qs) => qs.concat(placeIn({ id, title: title.trim(), goals: [], rewards: [] }, target)))
+    const stage = { id: newId('stage', quests.flatMap((q) => (q.stages || []).map((st) => st.id))), text: '' }
+    setQuests((qs) => qs.concat(placeIn({ id, title: title.trim(), stages: [stage], rewards: [] }, target)))
     setSelected({ kind: 'item', id })
   }
 
   // Edit one field of the chosen quest; an emptied optional field is dropped.
-  // Game days between handing in and the rewards (0013): { days: n }, none when empty.
-  const setWait = (text) => {
-    setQuests((qs) => qs.map((q) => {
-      if (q.id !== quest.id) return q
-      const { wait, ...rest } = q
-      return text.trim() === '' ? rest : { ...rest, wait: { days: Number(text) } }
-    }))
-  }
-
   const setQuestField = (key, value) => {
     setQuests((qs) => qs.map((q) => {
       if (q.id !== quest.id) return q
       const next = { ...q, [key]: value }
-      if (['icon', 'text', 'folder', 'giver', 'receiver'].includes(key) && value.trim() === '') delete next[key]
+      if (['icon', 'text', 'folder', 'giver'].includes(key) && value.trim() === '') delete next[key]
       return next
     }))
   }
+
+  // Edit the chosen stage with `change(stage)`, which returns the new one.
+  const changeStage = (change) => {
+    setQuests((qs) => qs.map((q) => (q.id !== quest.id ? q
+      : { ...q, stages: q.stages.map((st) => (st.id === stage.id ? change(st) : st)) })))
+  }
+  // One field of the chosen stage; an emptied optional one (to, goals) is dropped.
+  const setStageField = (key, value) => changeStage((st) => {
+    const next = { ...st, [key]: value }
+    if ((key === 'to' && value === '') || (key === 'goals' && !value.length)) delete next[key]
+    return next
+  })
+  // Game days between handing the stage in and going on (0013): { days: n }, none when empty.
+  const setWait = (text) => changeStage((st) => {
+    const { wait, ...rest } = st
+    return text.trim() === '' ? rest : { ...rest, wait: { days: Number(text) } }
+  })
+  const setStageLines = (key, lines) => changeStage((st) => {
+    const all = { ...st.lines, [key]: lines }
+    if (!lines.length) delete all[key]
+    const { lines: _, ...rest } = st
+    return Object.keys(all).length ? { ...rest, lines: all } : rest
+  })
 
   // Required quests and dialogue lines: an emptied list is dropped (0009).
   const setRequires = (ids) => {
@@ -355,7 +384,7 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                   <FolderSelect folders={folders} value={quest.folder} onChange={(v) => setQuestField('folder', v)} />
                 </label>
                 <label style={label}>
-                  <div style={{ marginBottom: 3 }}>Icon <span style={hint}>(item id; empty = first need)</span></div>
+                  <div style={{ marginBottom: 3 }}>Icon <span style={hint}>(item id; empty = the first stage's first need)</span></div>
                   <input
                     value={quest.icon ?? ''}
                     placeholder="e.g. minecraft:wheat"
@@ -379,13 +408,6 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                   <div style={{ marginBottom: 3 }}>Given by <span style={hint}>(offers it when the player talks; none = only graphs reveal it)</span></div>
                   <select value={quest.giver ?? ''} onChange={(e) => setQuestField('giver', e.target.value)} style={input}>
                     <option value="">(none)</option>
-                    {npcOptions}
-                  </select>
-                </label>
-                <label style={label}>
-                  <div style={{ marginBottom: 3 }}>Handed in to</div>
-                  <select value={quest.receiver ?? ''} onChange={(e) => setQuestField('receiver', e.target.value)} style={input}>
-                    <option value="">(the giver)</option>
                     {npcOptions}
                   </select>
                 </label>
@@ -413,56 +435,80 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
               </Section>
 
               <Section title="Dialogue">
-                <div style={{ ...hint, marginBottom: 8 }}>What the NPCs say, one page per line. + case says something else when a condition holds (the first case that holds is said).</div>
+                <div style={{ ...hint, marginBottom: 8 }}>What the giver says about taking it, one page per line. + case says something else when a condition holds (the first case that holds is said). What is said during a stage is in the stage.</div>
                 <div style={{ marginBottom: 3 }}>Offer <span style={hint}>(the giver, before Accept / Decline)</span></div>
                 <SpeechEditor value={quest.lines?.offer} onChange={(v) => setLines('offer', v)} placeholder="밀 10개만 구해다 주겠나?" inQuest quests={quests} />
                 <div style={{ margin: '10px 0 3px' }}>After accepting <span style={hint}>(the giver, right after Accept)</span></div>
                 <SpeechEditor value={quest.lines?.accepted} onChange={(v) => setLines('accepted', v)} placeholder="자, 이 씨앗으로 시작하게." inQuest quests={quests} />
                 <div style={{ margin: '10px 0 3px' }}>After declining <span style={hint}>(the giver, right after Decline; offered again next time)</span></div>
                 <SpeechEditor value={quest.lines?.declined} onChange={(v) => setLines('declined', v)} placeholder="그래… 무리한 부탁이지." inQuest quests={quests} />
-                <div style={{ margin: '10px 0 3px' }}>In progress <span style={hint}>(the receiver; with no lines the quest shows but can't be chosen)</span></div>
-                <SpeechEditor value={quest.lines?.active} onChange={(v) => setLines('active', v)} placeholder="아직 부족하구먼." inQuest quests={quests} />
-                <div style={{ margin: '10px 0 3px' }}>Hand in <span style={hint}>(the receiver, before Hand over)</span></div>
-                <SpeechEditor value={quest.lines?.complete} onChange={(v) => setLines('complete', v)} placeholder="고맙네!" inQuest quests={quests} />
-                <div style={{ ...hint, margin: '12px 0 0' }}>With a wait (Needs and rewards):</div>
-                <div style={{ margin: '4px 0 3px' }}>After handing over <span style={hint}>(the receiver, right after Hand over)</span></div>
-                <SpeechEditor value={quest.lines?.handed} onChange={(v) => setLines('handed', v)} placeholder="칼을 벼리는 데 하루는 걸리네. 내일 오게." inQuest quests={quests} />
-                <div style={{ margin: '10px 0 3px' }}>While waiting <span style={hint}>(the receiver; with no lines the quest shows but can't be chosen)</span></div>
-                <SpeechEditor value={quest.lines?.waiting} onChange={(v) => setLines('waiting', v)} placeholder="아직 망치질 중일세." inQuest quests={quests} />
-                <div style={{ margin: '10px 0 3px' }}>When it's ready <span style={hint}>(the receiver, before Take)</span></div>
-                <SpeechEditor value={quest.lines?.ready} onChange={(v) => setLines('ready', v)} placeholder="다 됐네! 받게." inQuest quests={quests} />
               </Section>
 
-              <Section title="Needs and rewards">
-                <label style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
-                  <span>✋ held item of</span>
-                  <select value={heldPlayer} onChange={(e) => pickHeldPlayer(e.target.value)} style={{ flex: 1, padding: '3px 2px' }}>
-                    <option value="">(player)</option>
-                    {(players.includes(heldPlayer) || !heldPlayer ? players : [heldPlayer, ...players]).map((p) => (
-                      <option key={p} value={p}>{p}{players.includes(p) ? '' : ' (offline)'}</option>
-                    ))}
-                  </select>
-                  <button onClick={loadPlayers} title="Refresh online players" style={{ cursor: 'pointer' }}>↻</button>
-                </label>
-                <div style={{ ...hint, marginBottom: 10 }}>
-                  In a need, only the listed parts must match. Delete damage=… to accept any wear.
-                </div>
+              {stage && (
+                <Section title="Stage">
+                  {stages.length > 1 && (
+                    <label style={label}>
+                      <select value={stage.id} onChange={(e) => setStageId(e.target.value)} style={input}>
+                        {stages.map((st, i) => <option key={st.id} value={st.id}>{i + 1}. {st.text || '(no text)'}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  <div style={{ ...hint, marginBottom: 8 }}>id: {stage.id} (fixed; players' records name the stage they are on by it)</div>
+                  <label style={label}>
+                    <div style={{ marginBottom: 3 }}>Text <span style={hint}>(what to do, a line in the quest screen)</span></div>
+                    <input value={stage.text ?? ''} placeholder="e.g. 촌장에게 밀 가져가기" onChange={(e) => setStageField('text', e.target.value)} style={input} />
+                  </label>
+                  <label style={label}>
+                    <div style={{ marginBottom: 3 }}>Go to <span style={hint}>(the NPC it is done with)</span></div>
+                    <select value={stage.to ?? ''} onChange={(e) => setStageField('to', e.target.value)} style={input}>
+                      <option value="">(the giver)</option>
+                      {npcOptions}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+                    <span>✋ held item of</span>
+                    <select value={heldPlayer} onChange={(e) => pickHeldPlayer(e.target.value)} style={{ flex: 1, padding: '3px 2px' }}>
+                      <option value="">(player)</option>
+                      {(players.includes(heldPlayer) || !heldPlayer ? players : [heldPlayer, ...players]).map((p) => (
+                        <option key={p} value={p}>{p}{players.includes(p) ? '' : ' (offline)'}</option>
+                      ))}
+                    </select>
+                    <button onClick={loadPlayers} title="Refresh online players" style={{ cursor: 'pointer' }}>↻</button>
+                  </label>
+                  <div style={{ ...hint, marginBottom: 10 }}>
+                    In a need, only the listed parts must match. Delete damage=… to accept any wear.
+                  </div>
+                  <div style={{ marginBottom: 3 }}>
+                    Needs <span style={hint}>(all of them, in this order; none = just talk to the NPC. Kill, harvest and breed count from 0 in each stage; collect items drop only during this stage, for that player only)</span>
+                  </div>
+                  <StackList goals fetchHeld={fetchHeld} lists={lists} stacks={stage.goals || []} onChange={(v) => setStageField('goals', v)} />
+                  <label style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 10 }}>
+                    <span>Wait</span>
+                    <input type="number" min="1" value={stage.wait?.days ?? ''} placeholder="none" onChange={(e) => setWait(e.target.value)}
+                      style={{ width: 60, padding: '3px 4px' }} />
+                    <span>days</span>
+                    <span style={hint}>(after Hand over; it goes on once this many mornings pass, 6:00 or waking up. Empty = right away)</span>
+                  </label>
+                  <div style={{ margin: '10px 0 3px' }}>In progress <span style={hint}>(the stage's NPC; with no lines the quest shows but can't be chosen)</span></div>
+                  <SpeechEditor value={stage.lines?.active} onChange={(v) => setStageLines('active', v)} placeholder="아직 부족하구먼." inQuest quests={quests} />
+                  <div style={{ margin: '10px 0 3px' }}>Hand in <span style={hint}>(the stage's NPC, before Hand over; with no needs, the talk itself)</span></div>
+                  <SpeechEditor value={stage.lines?.complete} onChange={(v) => setStageLines('complete', v)} placeholder="고맙네!" inQuest quests={quests} />
+                  <div style={{ margin: '10px 0 3px' }}>After handing over <span style={hint}>(the stage's NPC, right after Hand over: where to go next, or to come back after the wait)</span></div>
+                  <SpeechEditor value={stage.lines?.handed} onChange={(v) => setStageLines('handed', v)} placeholder="칼을 벼리는 데 하루는 걸리네. 내일 오게." inQuest quests={quests} />
+                  <div style={{ ...hint, margin: '12px 0 0' }}>With a wait:</div>
+                  <div style={{ margin: '4px 0 3px' }}>While waiting <span style={hint}>(the stage's NPC; with no lines the quest shows but can't be chosen)</span></div>
+                  <SpeechEditor value={stage.lines?.waiting} onChange={(v) => setStageLines('waiting', v)} placeholder="아직 망치질 중일세." inQuest quests={quests} />
+                  <div style={{ margin: '10px 0 3px' }}>When it's ready <span style={hint}>(the stage's NPC, before Take)</span></div>
+                  <SpeechEditor value={stage.lines?.ready} onChange={(v) => setStageLines('ready', v)} placeholder="다 됐네! 받게." inQuest quests={quests} />
+                </Section>
+              )}
+
+              <Section title="Supplies and rewards">
                 <div style={{ marginBottom: 3 }}>
                   Given on accepting <span style={hint}>(once, when the quest starts, also when a graph reveals it; not taken back)</span>
                 </div>
                 <StackList wide fetchHeld={fetchHeld} stacks={quest.supplies || []} onChange={(v) => setQuestField('supplies', v)} />
-                <div style={{ marginBottom: 3 }}>
-                  Needs <span style={hint}>(all of them, in this order; kill, harvest and breed count only after accepting; collect items drop only while the quest is in progress, for that player only)</span>
-                </div>
-                <StackList goals fetchHeld={fetchHeld} lists={lists} stacks={quest.goals} onChange={(v) => setQuestField('goals', v)} />
-                <label style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 10 }}>
-                  <span>Wait</span>
-                  <input type="number" min="1" value={quest.wait?.days ?? ''} placeholder="none" onChange={(e) => setWait(e.target.value)}
-                    style={{ width: 60, padding: '3px 4px' }} />
-                  <span>days</span>
-                  <span style={hint}>(after Hand over; the rewards come once this many mornings pass, 6:00 or waking up. Empty = right away)</span>
-                </label>
-                <div style={{ marginBottom: 3 }}>Rewards <span style={hint}>(item as /give writes it; [components] allowed)</span></div>
+                <div style={{ marginBottom: 3 }}>Rewards <span style={hint}>(when the last stage is done; item as /give writes it, [components] allowed)</span></div>
                 <StackList wide fetchHeld={fetchHeld} stacks={quest.rewards} onChange={(v) => setQuestField('rewards', v)} />
               </Section>
 

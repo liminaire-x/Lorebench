@@ -19,8 +19,9 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 
 /**
- * The quest screen: revealed quests on the left, the chosen one's story, needs
- * (with progress from this player's inventory) and rewards on the right.
+ * The quest screen: revealed quests on the left, the chosen one's story, its stages so far,
+ * the needs of the stage the player is on (with progress from this player's inventory) and
+ * rewards on the right.
  */
 public final class QuestScreen extends Screen {
 
@@ -134,12 +135,14 @@ public final class QuestScreen extends Screen {
         int dw = left + panelW - PAD - dx;
         int bottom = top + panelH - PAD;
         // Only an active quest shows progress: one handed in shows what was handed in ("× 10").
-        boolean active = selected.state() == QuestState.ACTIVE && player != null;
+        QuestDoc.Stage stage = q.current();
+        boolean done = selected.state() == QuestState.DONE;
+        boolean active = selected.state() == QuestState.ACTIVE && player != null && stage != null;
         Component status = switch (selected.state()) {
             case DONE -> Component.translatable("lorebench.quests.done").withColor(GREEN);
             case WAITING -> Component.translatable("lorebench.quests.waiting").withColor(LIGHT); // no days left shown (0013)
             case READY -> Component.translatable("lorebench.quests.take").withColor(GREEN);
-            default -> active && Quests.goalsMet(player.getInventory(), selected.progress(), q, card::condition)
+            default -> active && Quests.goalsMet(player.getInventory(), selected.progress(), q, stage, card::condition)
                     ? Component.translatable("lorebench.quests.ready").withColor(GREEN) : null;
         };
         y = listTop();
@@ -157,7 +160,19 @@ public final class QuestScreen extends Screen {
                 y += font.lineHeight;
             }
         }
-        ItemStack hovered = card.needsAndRewards(g, font, q, selected.progress(), active, false, true,
+        // The stages so far, dimmed, then what to do now (0015). Those ahead never reach the client,
+        // and how many there are is not shown. Once it is done, every stage is dimmed.
+        if (!q.stages().isEmpty()) {
+            y += 4;
+        }
+        for (QuestDoc.Stage s : q.stages()) {
+            boolean now = s == stage && !done;
+            for (FormattedCharSequence line : font.split(Component.literal(s.text()), dw)) {
+                g.drawString(font, line, dx, y, now ? WHITE : GRAY);
+                y += font.lineHeight;
+            }
+        }
+        ItemStack hovered = card.needsAndRewards(g, font, q, selected.progress(), active, false, !done,
                 dx, y, mouseX, mouseY);
         g.disableScissor();
         if (!hovered.isEmpty()) {
