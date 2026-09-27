@@ -7,6 +7,7 @@ package kr.guinnessgroup.lorebench.client;
 
 import kr.guinnessgroup.lorebench.Cues;
 import kr.guinnessgroup.lorebench.DialogueLines;
+import kr.guinnessgroup.lorebench.npc.NpcDoc;
 import kr.guinnessgroup.lorebench.npc.NpcEntity;
 import kr.guinnessgroup.lorebench.quest.Dialogue;
 import kr.guinnessgroup.lorebench.quest.DialogueChoicePayload;
@@ -15,6 +16,10 @@ import kr.guinnessgroup.lorebench.quest.QuestDoc;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.client.resources.sounds.SoundInstance;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
@@ -46,6 +51,8 @@ final class DialogueScreen extends Screen {
     private static final int LIGHT = 0xFFD0D0D0;
     private static final int GRAY = 0xFF909090;
     private static final int GOLD = 0xFFFFD84A;
+    /** A letter's sound, softer than the game's own sounds: it plays many times a second. */
+    private static final float VOICE_VOLUME = 0.5F;
 
     /** WAIT: nothing shows while the NPC plays its talk start (the user's choice; a click still skips it). */
     private enum Mode { WAIT, PAGES, CARD, LIST }
@@ -178,7 +185,20 @@ final class DialogueScreen extends Screen {
         if (npc != null) {
             npc.showLine(line.animation(), line.play() == DialogueLines.Play.LOOP);
         }
-        typing = new Typing(line.text(), this::cue);
+        typing = new Typing(line.text(), this::cue, this::letterSound);
+    }
+
+    /**
+     * The NPC's voice for one letter (0014), on this screen only and from nowhere in the world,
+     * under the game's Voice/Speech volume. An unknown sound plays nothing (the game logs it).
+     */
+    private void letterSound() {
+        NpcDoc.Voice voice = talk.voice();
+        ResourceLocation sound = voice.isEmpty() ? null : ResourceLocation.tryParse(voice.sound());
+        if (sound != null && minecraft != null) {
+            minecraft.getSoundManager().play(new SimpleSoundInstance(sound, SoundSource.VOICE, VOICE_VOLUME, voice.pitch(),
+                    SoundInstance.createUnseededRandom(), false, 0, SoundInstance.Attenuation.NONE, 0, 0, 0, true));
+        }
     }
 
     private void cue(Cues.Animate cue) {

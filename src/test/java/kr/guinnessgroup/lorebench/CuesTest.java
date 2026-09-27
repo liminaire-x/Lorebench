@@ -69,6 +69,16 @@ class CuesTest {
     }
 
     @Test
+    void lettersSoundButSpacesAndPunctuationStayQuiet() {
+        for (char c : "헉a1*당".toCharArray()) {
+            assertTrue(Cues.voiced(c), String.valueOf(c));
+        }
+        for (char c : " .,!?…~\n".toCharArray()) {
+            assertFalse(Cues.voiced(c), String.valueOf(c));
+        }
+    }
+
+    @Test
     void anEmojiIsOneLetter() {
         // Typing shows a letter outside the basic plane whole; the text keeps it as written.
         assertEquals("🥕 당근", Cues.plain("<speed=0.5>🥕 당근"));

@@ -34,16 +34,34 @@ public record NpcDoc(List<Folder> folders, List<NpcDef> npcs) {
      *                 groups of lines picked by where the player is with quests ({@link Speech}, 0012)
      *                 ({@link kr.guinnessgroup.lorebench.DialogueLines}, docs/decisions/0009-quest-workbench.md)
      * @param talk  how it moves while someone talks to it ({@link Talk#NONE}: keeps its idle)
+     * @param voice the sound its letters make as its lines type out ({@link Voice#NONE}: silent)
      */
     public record NpcDef(String id, String name, String model, String idle, String folder, Speech greeting,
-                         Talk talk) {
+                         Talk talk, Voice voice) {
 
         public NpcDef(String id, String name) {
-            this(id, name, "", "", "", Speech.NONE, Talk.NONE);
+            this(id, name, "", "", "", Speech.NONE, Talk.NONE, Voice.NONE);
         }
 
         public NpcDef(String id, String name, String model, String idle) {
-            this(id, name, model, idle, "", Speech.NONE, Talk.NONE);
+            this(id, name, model, idle, "", Speech.NONE, Talk.NONE, Voice.NONE);
+        }
+    }
+
+    /**
+     * An NPC's voice (docs/decisions/0014-typing.md): a sound played for the letters of its
+     * lines, on the talking player's screen only. Any sound name the client knows: the game's,
+     * or one a resource pack adds.
+     *
+     * @param sound a sound name like {@code minecraft:block.note_block.bass}, or "" for none
+     * @param pitch 0.5 to 2 (the game plays nothing outside that), 1 as recorded
+     */
+    public record Voice(String sound, float pitch) {
+
+        public static final Voice NONE = new Voice("", 1);
+
+        public boolean isEmpty() {
+            return sound.isEmpty();
         }
     }
 

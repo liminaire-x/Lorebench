@@ -11,17 +11,24 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * One page of dialogue typing out, a letter per tick at the usual speed (0014). Its cues
- * change the speed, pause, or have the NPC play an animation as the typing reaches them.
- * Ticked by the dialogue screen, 20 times a second.
+ * One page of dialogue typing out, a letter per tick at the usual speed (0014), each letter
+ * but spaces and punctuation with the NPC's voice. Its cues change the speed, pause, have the
+ * NPC play an animation, or turn the voice off and on as the typing reaches them. Ticked by
+ * the dialogue screen, 20 times a second. Showing the rest of the page at once makes no sound.
  */
 final class Typing {
 
     private static final int TICKS_PER_SECOND = 20;
+    /** Fewest ticks between two letter sounds, so fast typing doesn't blur into a buzz. */
+    private static final int SOUND_GAP = 2;
 
     private final List<Cues.Part> parts;
     private final String plain;
     private final Consumer<Cues.Animate> animate;
+    private final Runnable letterSound;
+    private boolean voiceOn = true;
+    private int ticks;
+    private int lastSound = -SOUND_GAP;
     /** The next part to reach, and how far into it when it is text. */
     private int part;
     private int inPart;
@@ -32,11 +39,15 @@ final class Typing {
     private double budget;
     private int pauseTicks;
 
-    /** @param animate plays an animation cue on the NPC talking */
-    Typing(String line, Consumer<Cues.Animate> animate) {
+    /**
+     * @param animate     plays an animation cue on the NPC talking
+     * @param letterSound plays the NPC's voice once, for a letter typed
+     */
+    Typing(String line, Consumer<Cues.Animate> animate, Runnable letterSound) {
         this.parts = Cues.parse(line);
         this.plain = Cues.plain(line);
         this.animate = animate;
+        this.letterSound = letterSound;
     }
 
     /** The page's words, without cues. */
@@ -57,6 +68,7 @@ final class Typing {
         if (done()) {
             return;
         }
+        ticks++;
         if (pauseTicks > 0) {
             pauseTicks--;
             return;
@@ -68,7 +80,12 @@ final class Typing {
                     break;
                 }
                 // A letter outside the basic plane (an emoji) is two chars: show both at once.
-                int n = Character.charCount(t.text().codePointAt(inPart));
+                int letter = t.text().codePointAt(inPart);
+                int n = Character.charCount(letter);
+                if (voiceOn && Cues.voiced(letter) && ticks - lastSound >= SOUND_GAP) {
+                    letterSound.run();
+                    lastSound = ticks;
+                }
                 inPart += n;
                 shown += n;
                 budget -= 1;
@@ -94,7 +111,7 @@ final class Typing {
                 budget = 0;
             }
             case Cues.Animate a -> animate.accept(a);
-            case Cues.Voice v -> { } // the letters' sound comes in the next part of 0014's story
+            case Cues.Voice v -> voiceOn = v.on();
             case Cues.Text t -> { }
         }
     }

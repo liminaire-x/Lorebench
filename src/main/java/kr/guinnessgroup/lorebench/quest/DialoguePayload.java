@@ -8,6 +8,7 @@ package kr.guinnessgroup.lorebench.quest;
 import kr.guinnessgroup.lorebench.DialogueLines;
 import kr.guinnessgroup.lorebench.Lorebench;
 import kr.guinnessgroup.lorebench.client.ClientDialogue;
+import kr.guinnessgroup.lorebench.npc.NpcDoc;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -26,13 +27,14 @@ import java.util.Map;
  *
  * @param npcEntity the network id of the NPC entity the player clicked, which plays the
  *                  lines' animations on this player's screen only
+ * @param voice  the sound of the NPC's letters as its lines type out (0014), or {@link NpcDoc.Voice#NONE}
  * @param resume sent after the player accepted, declined or handed something in: carry on with
  *               the list instead of starting over
  * @param said   with {@code resume}: what the NPC says first (a quest's lines for right after
  *               accepting or declining it, or handing it in to wait), or empty
  */
-public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.Line> greeting, List<Entry> entries,
-                              boolean resume, List<DialogueLines.Line> said)
+public record DialoguePayload(String npcName, int npcEntity, NpcDoc.Voice voice, List<DialogueLines.Line> greeting,
+                              List<Entry> entries, boolean resume, List<DialogueLines.Line> said)
         implements CustomPacketPayload {
 
     /**
@@ -49,7 +51,7 @@ public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.
 
     /** Registers both dialogue messages. Handled on the main thread (the registrar's default). */
     public static void register(RegisterPayloadHandlersEvent event) {
-        event.registrar("7")
+        event.registrar("8")
                 .playToClient(TYPE, CODEC, (payload, context) -> ClientDialogue.accept(payload))
                 .playToServer(DialogueChoicePayload.TYPE, DialogueChoicePayload.CODEC, (choice, context) -> {
                     Dialogues dialogues = Dialogues.current();
@@ -67,6 +69,8 @@ public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.
     private void write(FriendlyByteBuf buf) {
         buf.writeUtf(npcName);
         buf.writeVarInt(npcEntity);
+        buf.writeUtf(voice.sound());
+        buf.writeFloat(voice.pitch());
         writeLines(buf, greeting);
         buf.writeVarInt(entries.size());
         for (Entry e : entries) {
@@ -82,6 +86,7 @@ public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.
     private static DialoguePayload read(FriendlyByteBuf buf) {
         String npcName = buf.readUtf();
         int npcEntity = buf.readVarInt();
+        NpcDoc.Voice voice = new NpcDoc.Voice(buf.readUtf(), buf.readFloat());
         List<DialogueLines.Line> greeting = readLines(buf);
         int n = buf.readVarInt();
         List<Entry> entries = new ArrayList<>(n);
@@ -92,7 +97,7 @@ public record DialoguePayload(String npcName, int npcEntity, List<DialogueLines.
             entries.add(new Entry(kind, quest, lines, QuestSyncPayload.readProgress(buf)));
         }
         boolean resume = buf.readBoolean();
-        return new DialoguePayload(npcName, npcEntity, greeting, List.copyOf(entries), resume, readLines(buf));
+        return new DialoguePayload(npcName, npcEntity, voice, greeting, List.copyOf(entries), resume, readLines(buf));
     }
 
     private static void writeLines(FriendlyByteBuf buf, List<DialogueLines.Line> lines) {

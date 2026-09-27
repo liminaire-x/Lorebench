@@ -67,6 +67,14 @@ public final class Cues {
         return out.toString();
     }
 
+    /** Letters typed without the voice's sound: spaces and . , ! ? … ~ (0014). */
+    private static final String QUIET = ".,!?…~";
+
+    /** Whether a letter makes the NPC's voice sound as it types. */
+    public static boolean voiced(int codePoint) {
+        return !Character.isWhitespace(codePoint) && QUIET.indexOf(codePoint) < 0;
+    }
+
     /** What is wrong with the line's cues, each with where it is ("at character 12"); empty if nothing. */
     public static List<String> problems(String line) {
         List<String> problems = new ArrayList<>();

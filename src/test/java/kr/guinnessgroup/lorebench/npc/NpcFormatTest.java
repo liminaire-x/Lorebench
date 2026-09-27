@@ -107,6 +107,30 @@ class NpcFormatTest {
     }
 
     @Test
+    void aVoiceIsASoundNameOrASoundWithAPitch() {
+        NpcDoc doc = NpcFormat.read("""
+                { "format": 1, "npcs": [
+                  { "id": "npc_farmer", "name": "농부", "voice": { "sound": "minecraft:block.note_block.bass", "pitch": 0.8 } },
+                  { "id": "npc_guard", "name": "경비대장", "voice": "minecraft:block.note_block.xylophone" },
+                  { "id": "npc_ghost", "name": "유령", "voice": { "sound": "lorebench:voice.ghost", "pitch": 1 } },
+                  { "id": "npc_chief", "name": "촌장" } ] }
+                """);
+        assertEquals(new NpcDoc.Voice("minecraft:block.note_block.bass", 0.8F), doc.find("npc_farmer").voice());
+        assertEquals(new NpcDoc.Voice("minecraft:block.note_block.xylophone", 1), doc.find("npc_guard").voice());
+        assertEquals(NpcDoc.Voice.NONE, doc.find("npc_chief").voice());
+        String written = NpcFormat.write(doc);
+        assertEquals(doc, NpcFormat.read(written));
+        // At the recorded pitch a voice is written as just its name.
+        assertTrue(written.contains("\"voice\": \"lorebench:voice.ghost\""), written);
+        assertTrue(!NpcFormat.write(NpcFormat.read(CHIEF)).contains("voice"));
+        for (String voice : new String[] {"\"bass\"", "\"\"", "1", "{ \"pitch\": 1 }", "{ \"sound\": \"minecraft:a\", \"pitch\": 0.4 }",
+                "{ \"sound\": \"minecraft:a\", \"pitch\": 2.1 }", "{ \"sound\": \"minecraft:a\", \"volume\": 1 }", "[ ]"}) {
+            assertThrows(DocumentException.class, () -> NpcFormat.read(
+                    "{\"format\":1,\"npcs\":[{\"id\":\"npc_a\",\"name\":\"A\",\"voice\":" + voice + "}]}"), voice);
+        }
+    }
+
+    @Test
     void npcsSitInFolders() {
         NpcDoc doc = NpcFormat.read("""
                 { "format": 1, "folders": [ { "id": "folder_town", "name": "마을" } ],

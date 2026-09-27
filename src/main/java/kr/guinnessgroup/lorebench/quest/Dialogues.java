@@ -170,6 +170,6 @@ public final class Dialogues {
         // Only the picked lines are sent: the conditions stay on the server.
         List<DialogueLines.Line> greeting = def.greeting().pick(facts(player, null));
         PacketDistributor.sendToPlayer(player,
-                new DialoguePayload(def.name(), npc.getId(), greeting, List.copyOf(entries), resume, said));
+                new DialoguePayload(def.name(), npc.getId(), def.voice(), greeting, List.copyOf(entries), resume, said));
     }
 }
