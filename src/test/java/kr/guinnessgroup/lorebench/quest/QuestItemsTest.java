@@ -46,4 +46,21 @@ class QuestItemsTest {
         broken.putString(QuestItems.MARK, "quest_necklace");
         assertFalse(QuestItems.marks(broken, "quest_necklace", DEV1));
     }
+
+    @Test
+    void anyQuestsMarkIsAQuestItemWhoeverOwnsIt() {
+        CompoundTag mine = new CompoundTag();
+        mine.put(QuestItems.MARK, QuestItems.mark("quest_necklace", DEV1));
+        CompoundTag theirs = new CompoundTag();
+        theirs.put(QuestItems.MARK, QuestItems.mark("quest_wolf", DEV2));
+        assertTrue(QuestItems.isMarked(mine));
+        assertTrue(QuestItems.isMarked(theirs));
+        CompoundTag authors = new CompoundTag();
+        authors.putString("lorebench", "smith_sword"); // 0006's hidden mark is not a quest item
+        assertFalse(QuestItems.isMarked(authors));
+        assertFalse(QuestItems.isMarked(new CompoundTag()));
+        CompoundTag broken = new CompoundTag();
+        broken.putString(QuestItems.MARK, "quest_necklace");
+        assertFalse(QuestItems.isMarked(broken));
+    }
 }

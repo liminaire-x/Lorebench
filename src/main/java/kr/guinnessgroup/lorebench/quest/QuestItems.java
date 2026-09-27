@@ -42,11 +42,19 @@ public final class QuestItems {
 
     /** Whether custom data carries the mark of this quest and owner. */
     public static boolean marks(CompoundTag customData, String questId, UUID owner) {
-        if (!customData.contains(MARK, Tag.TAG_COMPOUND)) {
+        if (!isMarked(customData)) {
             return false;
         }
         CompoundTag mark = customData.getCompound(MARK);
         return questId.equals(mark.getString(QUEST)) && mark.hasUUID(OWNER) && owner.equals(mark.getUUID(OWNER));
+    }
+
+    /**
+     * Whether custom data carries any quest's mark, whoever the owner: what the tooltip's
+     * "Quest Item" line shows on. It names no quest, so it tells others nothing of the story.
+     */
+    public static boolean isMarked(CompoundTag customData) {
+        return customData.contains(MARK, Tag.TAG_COMPOUND);
     }
 
     /** Marks the stack as this quest's item for this owner, keeping its other custom data. */
