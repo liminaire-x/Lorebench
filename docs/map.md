@@ -44,6 +44,7 @@ Lorebench는 **클라이언트+서버 모드**다. 플레이어도 설치한다(
 |---|---|---|
 | NPC 정의 | 에디터에서 등록하는 NPC: id + 표시 이름. `npcs.json`. [0002](decisions/0002-npc.md) | **id·형식 비쌈** |
 | 외형 | NPC의 모델·텍스처·애니메이션(GeckoLib). `model`·`idle`이 리소스팩 파일을 이름으로 가리킨다. [0003](decisions/0003-npc-looks.md) | 중간 (리소스팩이 이름 규칙에 기댐) |
+| 대화 몸짓 | 말을 거는 동안의 한 벌 `talk`: 들어가기(`start`, 한 번) → 반복(`loop`) → 나가기(`end`, 닫을 때 한 번). 말 건 사람 화면에서만. [0011](decisions/0011-talk-gestures.md) | **칸 비쌈** |
 | 인사말 | 할 이야기가 없을 때 NPC가 하는 말(NPC 문서의 `greeting`) | **칸 비쌈**, 내용은 쌈 |
 | 퀘스트 | 제목·아이콘·본문·목표·보상을 가진 콘텐츠. `quests.json`. [0005](decisions/0005-quests.md) | **id·형식 비쌈**, 내용은 쌈 |
 | 주는·받는 NPC, 선행 | 누가 제안하고(`giver`) 누구에게 건네나(`receiver`, 없으면 주는 NPC), 먼저 끝내야 할 퀘스트(`requires`). [0009](decisions/0009-quest-workbench.md) | **칸 비쌈** |
