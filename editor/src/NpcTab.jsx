@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { newId } from './ids.js'
 import { FolderPanel, FolderSelect, FolderTree, addFolder, folderPath, placeIn } from './FolderTree.jsx'
-import { LineList, Section } from './Section.jsx'
+import { Section, SpeechEditor } from './Section.jsx'
 
 const input = { width: '100%', padding: '4px 6px', boxSizing: 'border-box' }
 const label = { display: 'block', marginBottom: 10 }
@@ -9,7 +9,7 @@ const hint = { color: '#888', fontSize: 11 }
 const toolButton = { padding: '4px 8px', cursor: 'pointer', color: '#2563eb', border: '1px solid #ddd', borderRadius: 5, background: '#fafafa' }
 
 // The NPC tab: a folder tree of NPCs on the left, the chosen NPC's sections (or folder) on the right.
-export default function NpcTab({ npcs, setNpcs, folders, setFolders, placements, status, hidden }) {
+export default function NpcTab({ npcs, setNpcs, folders, setFolders, placements, quests, status, hidden }) {
   const [selected, setSelected] = useState(null) // { kind: 'item' | 'folder', id }
   const [collapsed, setCollapsed] = useState(() => new Set()) // folder ids
   const npc = selected?.kind === 'item' ? npcs.find((n) => n.id === selected.id) || null : null
@@ -129,9 +129,9 @@ export default function NpcTab({ npcs, setNpcs, folders, setFolders, placements,
 
               <Section title="Dialogue">
                 <div style={{ marginBottom: 3 }}>
-                  Greeting <span style={hint}>(when the player has nothing to do with this NPC; one page per line)</span>
+                  Greeting <span style={hint}>(when the player has nothing to do with this NPC; one page per line; + case to greet by quest state)</span>
                 </div>
-                <LineList lines={npc.greeting} onChange={setGreeting} placeholder="오, 자네 왔군." />
+                <SpeechEditor value={npc.greeting} onChange={setGreeting} placeholder="오, 자네 왔군." quests={quests} />
               </Section>
 
               <Section title="Placed in the world">

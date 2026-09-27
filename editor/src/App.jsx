@@ -13,7 +13,7 @@ import '@xyflow/react/dist/style.css'
 import { newId } from './ids.js'
 import QuestTab from './QuestTab.jsx'
 import NpcTab from './NpcTab.jsx'
-import { lineText } from './Section.jsx'
+import { isCases, lineText } from './Section.jsx'
 import { FolderPanel, FolderSelect, FolderTree, addFolder, placeIn } from './FolderTree.jsx'
 
 // Must match the server (GraphFormat.java, NpcFormat.java, QuestFormat.java).
@@ -72,15 +72,34 @@ function toDoc(graphs, folders) {
 // because the server takes only real lines (DialogueLines.java).
 const realLines = (lines) => (lines || []).filter((l) => lineText(l).trim() !== '')
 
+// Cases (Speech.java) keep their real lines and filled-in conditions; an Otherwise with
+// nothing to say is the same as none, and a lone Otherwise is written as plain lines.
+// A case left with no condition is sent as is, and the server says what is missing.
+function realSpeech(v) {
+  if (!isCases(v)) return realLines(v)
+  const cases = v.map((c) => {
+    const lines = realLines(c.lines)
+    if (!c.when) return { lines }
+    const when = {}
+    const t = c.when.timesDeclined
+    if (typeof t === 'number' || (t && (t.min !== undefined || t.max !== undefined))) when.timesDeclined = t
+    const states = Object.entries(c.when.questState || {}).filter(([quest]) => quest)
+    if (states.length) when.questState = Object.fromEntries(states)
+    return { when, lines }
+  })
+  if (cases.length && !cases[cases.length - 1].when && !cases[cases.length - 1].lines.length) cases.pop()
+  return cases.length === 1 && !cases[0].when ? cases[0].lines : cases
+}
+
 function tidyNpc(n) {
   const { greeting, ...rest } = n
-  const lines = realLines(greeting)
-  return lines.length ? { ...rest, greeting: lines } : rest
+  const said = realSpeech(greeting)
+  return said.length ? { ...rest, greeting: said } : rest
 }
 
 function tidyQuest(q) {
   const { lines, ...rest } = q
-  const kept = Object.fromEntries(Object.entries(lines || {}).map(([k, v]) => [k, realLines(v)]).filter(([, v]) => v.length))
+  const kept = Object.fromEntries(Object.entries(lines || {}).map(([k, v]) => [k, realSpeech(v)]).filter(([, v]) => v.length))
   return Object.keys(kept).length ? { ...rest, lines: kept } : rest
 }
 
@@ -387,7 +406,7 @@ export default function App() {
         />
         <NpcTab
           npcs={npcs} setNpcs={setNpcs} folders={npcFolders} setFolders={setNpcFolders}
-          placements={placements} status={status} hidden={tab !== 'npcs'}
+          placements={placements} quests={quests} status={status} hidden={tab !== 'npcs'}
         />
 
         {tab === 'graphs' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>

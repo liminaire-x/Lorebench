@@ -11,10 +11,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import kr.guinnessgroup.lorebench.DialogueLines;
 import kr.guinnessgroup.lorebench.DocumentException;
 import kr.guinnessgroup.lorebench.Folders;
 import kr.guinnessgroup.lorebench.Ids;
+import kr.guinnessgroup.lorebench.Speech;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
  *               "talk": { "start": "animation.chief.talk_start", "loop": "animation.chief.talk", "end": "animation.chief.talk_end" } } ] }</pre>
  * {@code model} and {@code idle} are optional (a plain NPC has neither). {@code folders} and
  * {@code folder} group NPCs in the editor ({@link Folders}). {@code greeting} is optional
- * ({@link DialogueLines}). {@code talk} is optional, and so is each of its names
+ * ({@link Speech}: lines, or groups picked by quest state). {@code talk} is optional, and so is each of its names
  * (docs/decisions/0011-talk-gestures.md).
  * This file has its own format number so NPCs can grow (looks, animations,
  * cinematics) without touching the graph document.
@@ -105,7 +105,7 @@ public final class NpcFormat {
                 continue;
             }
             String folder = Folders.placement(o, folders, where, errors);
-            List<DialogueLines.Line> greeting = DialogueLines.read(o.get("greeting"), where + " greeting", errors);
+            Speech greeting = Speech.read(o.get("greeting"), false, where + " greeting", errors);
             NpcDoc.Talk talk = readTalk(o.get("talk"), where, errors);
             npcs.add(new NpcDoc.NpcDef(id, name, model, idle, folder, greeting, talk));
         }
@@ -129,7 +129,7 @@ public final class NpcFormat {
             }
             Folders.writePlacement(o, n.folder());
             if (!n.greeting().isEmpty()) {
-                o.add("greeting", DialogueLines.write(n.greeting()));
+                o.add("greeting", Speech.write(n.greeting()));
             }
             if (!n.talk().isEmpty()) {
                 o.add("talk", writeTalk(n.talk()));

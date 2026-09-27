@@ -8,6 +8,7 @@ package kr.guinnessgroup.lorebench.quest;
 import kr.guinnessgroup.lorebench.DialogueLines;
 import kr.guinnessgroup.lorebench.DocumentException;
 import kr.guinnessgroup.lorebench.Folders;
+import kr.guinnessgroup.lorebench.Speech;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -73,8 +74,8 @@ class QuestFormatTest {
                 """);
         QuestDoc.Flow wolf = doc.find("quest_wolf").flow();
         assertEquals(new QuestDoc.Flow("npc_guard", "npc_smith", List.of("quest_sword"),
-                new QuestDoc.Lines(DialogueLines.text("늑대 3마리만 잡아주게.", "요즘 가축이 자꾸 사라지거든."), List.of(),
-                        List.of(), List.of(), DialogueLines.text("대단하군!"))),
+                new QuestDoc.Lines(Speech.text("늑대 3마리만 잡아주게.", "요즘 가축이 자꾸 사라지거든."), Speech.NONE,
+                        Speech.NONE, Speech.NONE, Speech.text("대단하군!"))),
                 wolf);
         assertEquals("npc_smith", wolf.handInTo());
         assertEquals("npc_smith", doc.find("quest_sword").flow().handInTo());
@@ -100,7 +101,7 @@ class QuestFormatTest {
                 """);
         QuestDoc.Quest q = doc.find("quest_farm");
         assertEquals(List.of(new QuestDoc.Stack("minecraft:wheat_seeds", 5)), q.supplies());
-        assertEquals(List.of(new DialogueLines.Line("자, 이 씨앗으로 시작하게.", "animation.chief.wave")),
+        assertEquals(Speech.of(List.of(new DialogueLines.Line("자, 이 씨앗으로 시작하게.", "animation.chief.wave"))),
                 q.flow().lines().accepted());
         assertEquals(doc, QuestFormat.read(QuestFormat.write(doc)));
         assertThrows(DocumentException.class, () -> QuestFormat.read(
@@ -136,10 +137,32 @@ class QuestFormatTest {
                   "lines": { "offer": [ "조각이라도 찾아 주겠나?" ], "declined": [ "그래… 무리한 부탁이지." ] },
                   "goals": [], "rewards": [] } ] }
                 """);
-        assertEquals(DialogueLines.text("그래… 무리한 부탁이지."), doc.find("quest_necklace").flow().lines().declined());
+        assertEquals(Speech.text("그래… 무리한 부탁이지."), doc.find("quest_necklace").flow().lines().declined());
         String written = QuestFormat.write(doc);
         assertTrue(written.contains("\"declined\""), written);
         assertEquals(doc, QuestFormat.read(written));
+    }
+
+    @Test
+    void linesPickedByConditionRoundTripAndNameQuestsThatExist() {
+        String necklace = """
+                { "id": "quest_necklace", "title": "목걸이 찾기", "giver": "npc_guard",
+                  "lines": { "offer": [
+                    { "when": { "timesDeclined": { "min": 5 } }, "lines": [ "…자네, 일부러 그러는 거지?" ] },
+                    { "when": { "timesDeclined": { "min": 1 } }, "lines": [ "마음이 바뀌었나?" ] },
+                    { "lines": [ "늑대가 딸의 목걸이를 물고 달아났네." ] } ] },
+                  "goals": [], "rewards": [] }""";
+        QuestDoc doc = QuestFormat.read("{ \"format\": 1, \"quests\": [" + necklace + "] }");
+        assertEquals(3, doc.find("quest_necklace").flow().lines().offer().groups().size());
+        assertEquals(doc, QuestFormat.read(QuestFormat.write(doc)));
+        String sword = """
+                { "id": "quest_sword", "title": "칼 만들기", "lines": { "offer": [
+                  { "when": { "questState": { "quest_necklace": "done" } }, "lines": [ "자네라면 믿고 맡기지." ] },
+                  { "lines": [ "철 5개만 가져오게." ] } ] }, "goals": [], "rewards": [] }""";
+        QuestFormat.read("{ \"format\": 1, \"quests\": [" + necklace + "," + sword + "] }");
+        DocumentException e = assertThrows(DocumentException.class,
+                () -> QuestFormat.read("{ \"format\": 1, \"quests\": [" + sword + "] }"));
+        assertEquals(List.of("quest '칼 만들기' (quest_sword) offer: quest 'quest_necklace' does not exist"), e.errors());
     }
 
     @Test

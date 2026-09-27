@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { newId } from './ids.js'
 import { FolderPanel, FolderSelect, FolderTree, addFolder, byText, folderPath, placeIn } from './FolderTree.jsx'
-import { LineList, Section } from './Section.jsx'
+import { Section, SpeechEditor } from './Section.jsx'
 
 const input = { width: '100%', padding: '4px 6px', boxSizing: 'border-box' }
 const label = { display: 'block', marginBottom: 12 }
@@ -355,17 +355,17 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
               </Section>
 
               <Section title="Dialogue">
-                <div style={{ ...hint, marginBottom: 8 }}>What the NPCs say, one page per line.</div>
+                <div style={{ ...hint, marginBottom: 8 }}>What the NPCs say, one page per line. + case says something else when a condition holds (the first case that holds is said).</div>
                 <div style={{ marginBottom: 3 }}>Offer <span style={hint}>(the giver, before Accept / Decline)</span></div>
-                <LineList lines={quest.lines?.offer} onChange={(v) => setLines('offer', v)} placeholder="밀 10개만 구해다 주겠나?" />
+                <SpeechEditor value={quest.lines?.offer} onChange={(v) => setLines('offer', v)} placeholder="밀 10개만 구해다 주겠나?" inQuest quests={quests} />
                 <div style={{ margin: '10px 0 3px' }}>After accepting <span style={hint}>(the giver, right after Accept)</span></div>
-                <LineList lines={quest.lines?.accepted} onChange={(v) => setLines('accepted', v)} placeholder="자, 이 씨앗으로 시작하게." />
+                <SpeechEditor value={quest.lines?.accepted} onChange={(v) => setLines('accepted', v)} placeholder="자, 이 씨앗으로 시작하게." inQuest quests={quests} />
                 <div style={{ margin: '10px 0 3px' }}>After declining <span style={hint}>(the giver, right after Decline; offered again next time)</span></div>
-                <LineList lines={quest.lines?.declined} onChange={(v) => setLines('declined', v)} placeholder="그래… 무리한 부탁이지." />
+                <SpeechEditor value={quest.lines?.declined} onChange={(v) => setLines('declined', v)} placeholder="그래… 무리한 부탁이지." inQuest quests={quests} />
                 <div style={{ margin: '10px 0 3px' }}>In progress <span style={hint}>(the receiver; with no lines the quest shows but can't be chosen)</span></div>
-                <LineList lines={quest.lines?.active} onChange={(v) => setLines('active', v)} placeholder="아직 부족하구먼." />
+                <SpeechEditor value={quest.lines?.active} onChange={(v) => setLines('active', v)} placeholder="아직 부족하구먼." inQuest quests={quests} />
                 <div style={{ margin: '10px 0 3px' }}>Hand in <span style={hint}>(the receiver, before Hand over)</span></div>
-                <LineList lines={quest.lines?.complete} onChange={(v) => setLines('complete', v)} placeholder="고맙네!" />
+                <SpeechEditor value={quest.lines?.complete} onChange={(v) => setLines('complete', v)} placeholder="고맙네!" inQuest quests={quests} />
               </Section>
 
               <Section title="Needs and rewards">

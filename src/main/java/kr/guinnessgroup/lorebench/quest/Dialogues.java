@@ -7,6 +7,7 @@ package kr.guinnessgroup.lorebench.quest;
 
 import com.mojang.logging.LogUtils;
 import kr.guinnessgroup.lorebench.DialogueLines;
+import kr.guinnessgroup.lorebench.Speech;
 import kr.guinnessgroup.lorebench.npc.NpcDoc;
 import kr.guinnessgroup.lorebench.npc.NpcEntity;
 import kr.guinnessgroup.lorebench.npc.Npcs;
@@ -67,12 +68,12 @@ public final class Dialogues {
 
     /**
      * A player right-clicked an NPC. Opens its dialogue if it has anything to say: a
-     * greeting, or a quest to take in, offer or wait on.
+     * greeting (for this player), or a quest to take in, offer or wait on.
      */
     public void open(ServerPlayer player, NpcEntity npc) {
         NpcDoc.NpcDef def = runtime.npc(npc.npcId());
         List<Dialogue.Entry> plan = def == null ? List.of() : plan(player, def.id());
-        if (def == null || (plan.isEmpty() && def.greeting().isEmpty())) {
+        if (def == null || (plan.isEmpty() && def.greeting().pick(facts(player, null)).isEmpty())) {
             talks.remove(player.getUUID());
             return;
         }
@@ -82,7 +83,8 @@ public final class Dialogues {
 
     /**
      * The player accepted or turned down an offer, or handed a quest in. Anything that no
-     * longer holds is ignored. A refusal is remembered (0012).
+     * longer holds is ignored. A refusal is remembered (0012), before picking what the NPC
+     * says to it, so the fifth refusal is said to with the lines for five.
      */
     public void choose(ServerPlayer player, DialogueChoicePayload choice) {
         Talk talk = talks.get(player.getUUID());
@@ -98,18 +100,19 @@ public final class Dialogues {
         boolean allowed = plan(player, def.id()).stream()
                 .anyMatch(e -> e.kind() == needed && e.quest().id().equals(choice.questId()));
         List<DialogueLines.Line> said = List.of();
+        String questId = choice.questId();
         if (!allowed) {
             LOGGER.debug("[Lorebench] {} chose {} {} with {}, which no longer holds",
                     player.getGameProfile().getName(), choice.action(), choice.questId(), def.id());
         } else {
             switch (choice.action()) {
                 case ACCEPT -> {
-                    quests.reveal(player, choice.questId());
-                    said = runtime.quest(choice.questId()).flow().lines().accepted();
+                    quests.reveal(player, questId);
+                    said = runtime.quest(questId).flow().lines().accepted().pick(facts(player, questId));
                 }
                 case DECLINE -> {
-                    quests.decline(player, choice.questId());
-                    said = runtime.quest(choice.questId()).flow().lines().declined();
+                    quests.decline(player, questId);
+                    said = runtime.quest(questId).flow().lines().declined().pick(facts(player, questId));
                 }
                 case HAND_IN -> quests.complete(player, choice.questId());
             }
@@ -126,13 +129,36 @@ public final class Dialogues {
         return Dialogue.plan(npcId, runtime.quests(), id -> quests.state(player, id));
     }
 
+    /**
+     * What conditions on lines ask about this player, looked up only when asked.
+     *
+     * @param questId the quest the lines belong to, or null for a greeting
+     */
+    private Speech.Facts facts(ServerPlayer player, String questId) {
+        return new Speech.Facts() {
+            @Override
+            public int timesDeclined() {
+                return questId == null ? 0 : quests.timesDeclined(player, questId);
+            }
+
+            @Override
+            public QuestState questState(String id) {
+                return quests.state(player, id);
+            }
+        };
+    }
+
     private void send(ServerPlayer player, NpcDoc.NpcDef def, NpcEntity npc, List<Dialogue.Entry> plan, boolean resume,
                       List<DialogueLines.Line> said) {
         List<DialoguePayload.Entry> entries = new ArrayList<>();
         for (Dialogue.Entry e : plan) {
-            entries.add(new DialoguePayload.Entry(e.kind(), e.quest(), Dialogue.lines(e), quests.progress(player, e.quest().id())));
+            String id = e.quest().id();
+            entries.add(new DialoguePayload.Entry(e.kind(), e.quest(), Dialogue.lines(e).pick(facts(player, id)),
+                    quests.progress(player, id)));
         }
+        // Only the picked lines are sent: the conditions stay on the server.
+        List<DialogueLines.Line> greeting = def.greeting().pick(facts(player, null));
         PacketDistributor.sendToPlayer(player,
-                new DialoguePayload(def.name(), npc.getId(), def.greeting(), List.copyOf(entries), resume, said));
+                new DialoguePayload(def.name(), npc.getId(), greeting, List.copyOf(entries), resume, said));
     }
 }

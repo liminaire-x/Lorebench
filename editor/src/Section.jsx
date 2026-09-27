@@ -65,3 +65,135 @@ export function LineList({ lines = [], onChange, placeholder }) {
     </div>
   )
 }
+
+// What an NPC says in one place (Speech.java, 0012): lines, or cases of which the first
+// whose "when" holds for the player is said (if / else if / otherwise). The last case
+// without "when" is Otherwise. Plain lines are one Otherwise case, written as before.
+export const isCases = (v) => Array.isArray(v) && v.some((x) => x !== null && typeof x === 'object' && 'lines' in x)
+
+export const QUEST_STATES = [['hidden', 'not taken'], ['active', 'in progress'], ['ready', 'ready to hand in'], ['done', 'done']]
+
+const box = { border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px', marginBottom: 6 }
+const small = { cursor: 'pointer', fontSize: 11 }
+
+// Back to plain lines when only Otherwise is left.
+const tidyCases = (cases) => (cases.length === 1 && !cases[0].when ? cases[0].lines : cases)
+
+export function SpeechEditor({ value = [], onChange, placeholder, inQuest, quests = [] }) {
+  const newCase = () => ({ when: inQuest ? { timesDeclined: { min: 1 } } : { questState: { '': 'done' } }, lines: [] })
+  if (!isCases(value)) {
+    return (
+      <div>
+        <LineList lines={value} onChange={onChange} placeholder={placeholder} />
+        <button
+          onClick={() => onChange([newCase(), { lines: value }])} style={{ ...small, color: '#2563eb', marginTop: 3 }}
+          title="Say something else when a condition holds; these lines become Otherwise"
+        >+ case</button>
+      </div>
+    )
+  }
+  const cases = value
+  const otherwise = cases.length > 0 && !cases[cases.length - 1].when
+  const set = (next) => onChange(tidyCases(next))
+  const move = (i, d) => {
+    const next = cases.slice()
+    ;[next[i], next[i + d]] = [next[i + d], next[i]]
+    set(next)
+  }
+  const conditional = otherwise ? cases.length - 1 : cases.length
+  return (
+    <div>
+      {cases.map((c, i) => (
+        <div key={i} style={box}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+            <b style={{ fontSize: 12 }}>{!c.when ? 'Otherwise' : i === 0 ? 'If' : 'Else if'}</b>
+            <span style={{ flex: 1 }} />
+            {c.when && i > 0 && <button onClick={() => move(i, -1)} style={small} title="Check earlier">↑</button>}
+            {c.when && i < conditional - 1 && <button onClick={() => move(i, 1)} style={small} title="Check later">↓</button>}
+            <button onClick={() => set(cases.filter((_, j) => j !== i))} style={small} title="Remove this case">×</button>
+          </div>
+          {c.when && (
+            <When
+              when={c.when} inQuest={inQuest} quests={quests}
+              onChange={(when) => set(cases.map((x, j) => (j === i ? { ...x, when } : x)))}
+            />
+          )}
+          <LineList
+            lines={c.lines} placeholder={placeholder}
+            onChange={(lines) => set(cases.map((x, j) => (j === i ? { ...x, lines } : x)))}
+          />
+        </div>
+      ))}
+      <button
+        onClick={() => set(otherwise ? [...cases.slice(0, -1), newCase(), cases[cases.length - 1]] : [...cases, newCase()])}
+        style={{ ...small, color: '#2563eb' }}
+      >+ case</button>
+      {!otherwise && (
+        <button onClick={() => set([...cases, { lines: [] }])} style={{ ...small, color: '#2563eb', marginLeft: 6 }}>+ otherwise</button>
+      )}
+    </div>
+  )
+}
+
+// A case's conditions; all must hold. Counts are Minecraft ranges: 5, { min }, { max }.
+function When({ when, onChange, inQuest, quests }) {
+  const times = when.timesDeclined
+  const min = typeof times === 'number' ? times : times?.min
+  const max = typeof times === 'number' ? times : times?.max
+  const setTimes = (lo, hi) => {
+    const r = {}
+    if (lo !== undefined) r.min = lo
+    if (hi !== undefined) r.max = hi
+    onChange({ ...when, timesDeclined: lo !== undefined && lo === hi ? lo : r })
+  }
+  const count = (s) => (s.trim() === '' || !/^\d+$/.test(s.trim()) ? undefined : parseInt(s, 10))
+  const drop = (key) => {
+    const { [key]: _, ...rest } = when
+    onChange(rest)
+  }
+  const states = Object.entries(when.questState || {})
+  const setStates = (entries) => {
+    if (!entries.length) return drop('questState')
+    onChange({ ...when, questState: Object.fromEntries(entries) })
+  }
+  const byTitle = [...quests].sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+  return (
+    <div style={{ fontSize: 12, marginBottom: 4 }}>
+      {times !== undefined && (
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 3 }}>
+          Declined
+          <input value={min ?? ''} placeholder="0" onChange={(e) => setTimes(count(e.target.value), max)} style={{ width: 44 }} />
+          to
+          <input value={max ?? ''} placeholder="any" onChange={(e) => setTimes(min, count(e.target.value))} style={{ width: 44 }} />
+          times <span style={{ color: '#888' }}>(this quest; in After declining, this refusal counts)</span>
+          <button onClick={() => drop('timesDeclined')} style={small}>×</button>
+        </div>
+      )}
+      {states.map(([quest, state], i) => (
+        <div key={i} style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 3 }}>
+          Quest
+          <select value={quest} onChange={(e) => setStates(states.map((s, j) => (j === i ? [e.target.value, s[1]] : s)))}>
+            <option value="">(choose)</option>
+            {byTitle.map((q) => <option key={q.id} value={q.id}>{q.title || q.id}</option>)}
+          </select>
+          is
+          <select value={state} onChange={(e) => setStates(states.map((s, j) => (j === i ? [s[0], e.target.value] : s)))}>
+            {QUEST_STATES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+          </select>
+          <button onClick={() => setStates(states.filter((_, j) => j !== i))} style={small}>×</button>
+        </div>
+      ))}
+      <select
+        value="" style={{ fontSize: 11 }}
+        onChange={(e) => {
+          if (e.target.value === 'times') onChange({ ...when, timesDeclined: { min: 1 } })
+          if (e.target.value === 'quest' && !states.some(([q]) => q === '')) setStates([...states, ['', 'done']])
+        }}
+      >
+        <option value="">+ and…</option>
+        {inQuest && times === undefined && <option value="times">times declined</option>}
+        <option value="quest">quest state</option>
+      </select>
+    </div>
+  )
+}

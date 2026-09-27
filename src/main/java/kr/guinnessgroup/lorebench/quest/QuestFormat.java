@@ -12,10 +12,10 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
-import kr.guinnessgroup.lorebench.DialogueLines;
 import kr.guinnessgroup.lorebench.DocumentException;
 import kr.guinnessgroup.lorebench.Folders;
 import kr.guinnessgroup.lorebench.Ids;
+import kr.guinnessgroup.lorebench.Speech;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -42,8 +42,9 @@ import java.util.regex.Pattern;
  *   "rewards": [ { "item": "minecraft:emerald", "count": 5 } ] } ] }</pre>
  * {@code folders}, a folder's {@code parent}, and a quest's {@code icon}, {@code text}, {@code folder},
  * {@code giver}, {@code receiver}, {@code requires}, {@code lines} and {@code supplies} are optional (no parent or
- * folder = the top; see docs/decisions/0009-quest-workbench.md for the rest). Required quests must
- * exist and never lead back to the quest. Beyond that this checks only the shape; whether the items,
+ * folder = the top; see docs/decisions/0009-quest-workbench.md for the rest). Each of {@code lines} may
+ * instead be groups picked by condition ({@link Speech}, 0012). Required quests, and quests the conditions
+ * name, must exist, and requirements never lead back to the quest. Beyond that this checks only the shape; whether the items,
  * entities, crops and NPCs exist is checked on publish, where the game's lists are available.
  */
 public final class QuestFormat {
@@ -185,16 +186,16 @@ public final class QuestFormat {
             }
         }
         return new QuestDoc.Lines(
-                DialogueLines.read(o.get("offer"), where + " offer", errors),
-                DialogueLines.read(o.get("accepted"), where + " accepted", errors),
-                DialogueLines.read(o.get("declined"), where + " declined", errors),
-                DialogueLines.read(o.get("active"), where + " active", errors),
-                DialogueLines.read(o.get("complete"), where + " complete", errors));
+                Speech.read(o.get("offer"), true, where + " offer", errors),
+                Speech.read(o.get("accepted"), true, where + " accepted", errors),
+                Speech.read(o.get("declined"), true, where + " declined", errors),
+                Speech.read(o.get("active"), true, where + " active", errors),
+                Speech.read(o.get("complete"), true, where + " complete", errors));
     }
 
     /**
      * Required quests must exist, and following them must never come back to the quest
-     * (it could never be offered).
+     * (it could never be offered). Quests the lines' conditions name must exist too.
      */
     private static void checkRequires(List<QuestDoc.Quest> quests, Set<String> ids, List<String> errors) {
         Map<String, List<String>> requires = new HashMap<>();
@@ -206,6 +207,13 @@ public final class QuestFormat {
                     errors.add(where + " requires itself");
                 } else if (!ids.contains(r)) {
                     errors.add(where + " requires quest '" + r + "' that does not exist");
+                }
+            }
+            for (int i = 0; i < LINE_KEYS.size(); i++) {
+                for (String named : q.flow().lines().all().get(i).questsNamed()) {
+                    if (!ids.contains(named)) {
+                        errors.add(where + " " + LINE_KEYS.get(i) + ": quest '" + named + "' does not exist");
+                    }
                 }
             }
         }
@@ -378,10 +386,10 @@ public final class QuestFormat {
         }
         JsonObject lines = new JsonObject();
         QuestDoc.Lines l = flow.lines();
-        List<List<DialogueLines.Line>> all = List.of(l.offer(), l.accepted(), l.declined(), l.active(), l.complete());
+        List<Speech> all = l.all();
         for (int i = 0; i < LINE_KEYS.size(); i++) {
             if (!all.get(i).isEmpty()) {
-                lines.add(LINE_KEYS.get(i), DialogueLines.write(all.get(i)));
+                lines.add(LINE_KEYS.get(i), Speech.write(all.get(i)));
             }
         }
         if (lines.size() > 0) {

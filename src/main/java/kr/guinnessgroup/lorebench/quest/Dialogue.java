@@ -5,7 +5,7 @@
  */
 package kr.guinnessgroup.lorebench.quest;
 
-import kr.guinnessgroup.lorebench.DialogueLines;
+import kr.guinnessgroup.lorebench.Speech;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -63,8 +63,8 @@ public final class Dialogue {
         return entries.isEmpty() || entries.get(0).kind() == Kind.ACTIVE ? null : entries.get(0);
     }
 
-    /** The lines the NPC says for an entry. */
-    public static List<DialogueLines.Line> lines(Entry entry) {
+    /** What the NPC says for an entry, before picking by condition ({@link Speech#pick}). */
+    public static Speech lines(Entry entry) {
         QuestDoc.Lines lines = entry.quest().flow().lines();
         return switch (entry.kind()) {
             case READY -> lines.complete();

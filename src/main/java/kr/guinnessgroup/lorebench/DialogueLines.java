@@ -15,7 +15,7 @@ import java.util.Set;
 
 /**
  * What an NPC says, as a list of lines shown one page at a time. Used by a quest's
- * lines and an NPC's greeting. A line is text, or text with an animation the NPC
+ * lines and an NPC's greeting, alone or in groups picked by condition ({@link Speech}). A line is text, or text with an animation the NPC
  * plays when the page shows, by name (once) or as { name, play }:
  * <pre>[ "고맙네!", { "text": "약속한 에메랄드일세.", "animation": "animation.chief.happy" },
  *   { "text": "이 밭 좀 보게.", "animation": { "name": "animation.chief.point", "play": "loop" } } ]</pre>

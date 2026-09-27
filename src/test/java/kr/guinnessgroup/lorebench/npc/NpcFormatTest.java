@@ -5,11 +5,12 @@
  */
 package kr.guinnessgroup.lorebench.npc;
 
-import kr.guinnessgroup.lorebench.DialogueLines;
 import kr.guinnessgroup.lorebench.DocumentException;
+import kr.guinnessgroup.lorebench.Speech;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,13 +53,30 @@ class NpcFormatTest {
     }
 
     @Test
+    void aGreetingCanDependOnQuestsThatMustExist() {
+        NpcDoc doc = NpcFormat.read("""
+                { "format": 1, "npcs": [ { "id": "npc_guard", "name": "경비대장", "greeting": [
+                  { "when": { "questState": { "quest_necklace": "done" } }, "lines": [ "목걸이 덕에 딸이 다시 웃는다네." ] },
+                  { "lines": [ "오, 자네 왔군." ] } ] } ] }
+                """);
+        assertEquals(doc, NpcFormat.read(NpcFormat.write(doc)));
+        assertEquals(List.of(), doc.questErrors(Set.of("quest_necklace")));
+        assertEquals(List.of("NPC '경비대장' (npc_guard) greeting: quest 'quest_necklace' does not exist"),
+                doc.questErrors(Set.of()));
+        // A greeting has no quest of its own to count refusals of.
+        assertThrows(DocumentException.class, () -> NpcFormat.read(
+                "{\"format\":1,\"npcs\":[{\"id\":\"npc_a\",\"name\":\"A\",\"greeting\":"
+                        + "[{\"when\":{\"timesDeclined\":1},\"lines\":[\"hi\"]}]}]}"));
+    }
+
+    @Test
     void greetingIsOptionalLinesOfText() {
         NpcDoc doc = NpcFormat.read("""
                 { "format": 1, "npcs": [ { "id": "npc_guard", "name": "경비대장", "greeting": [ "오, 자네 왔군.", "무슨 일인가?" ] } ] }
                 """);
-        assertEquals(DialogueLines.text("오, 자네 왔군.", "무슨 일인가?"), doc.find("npc_guard").greeting());
+        assertEquals(Speech.text("오, 자네 왔군.", "무슨 일인가?"), doc.find("npc_guard").greeting());
         assertEquals(doc, NpcFormat.read(NpcFormat.write(doc)));
-        assertEquals(List.of(), NpcFormat.read(CHIEF).find("npc_chief").greeting());
+        assertEquals(Speech.NONE, NpcFormat.read(CHIEF).find("npc_chief").greeting());
         assertTrue(!NpcFormat.write(NpcFormat.read(CHIEF)).contains("greeting"));
         for (String greeting : new String[] {"\"hi\"", "[ 1 ]", "[ \"\" ]"}) {
             assertThrows(DocumentException.class, () -> NpcFormat.read(

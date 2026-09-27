@@ -5,10 +5,13 @@
  */
 package kr.guinnessgroup.lorebench.npc;
 
-import kr.guinnessgroup.lorebench.DialogueLines.Line;
 import kr.guinnessgroup.lorebench.Folders.Folder;
+import kr.guinnessgroup.lorebench.Ids;
+import kr.guinnessgroup.lorebench.Speech;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The saved NPC document ({@code npcs.json}): every NPC definition, authored in
@@ -27,19 +30,20 @@ public record NpcDoc(List<Folder> folders, List<NpcDef> npcs) {
      *              {@code animations/npc/<model>.animation.json}, {@code textures/npc/<model>.png}
      * @param idle  animation looped while nothing else plays, or ""
      * @param folder the editor folder id it sits in, or "" for the top ({@link kr.guinnessgroup.lorebench.Folders})
-     * @param greeting what it says when the player has nothing to do with it, one page per line
+     * @param greeting what it says when the player has nothing to do with it, one page per line, or
+     *                 groups of lines picked by where the player is with quests ({@link Speech}, 0012)
      *                 ({@link kr.guinnessgroup.lorebench.DialogueLines}, docs/decisions/0009-quest-workbench.md)
      * @param talk  how it moves while someone talks to it ({@link Talk#NONE}: keeps its idle)
      */
-    public record NpcDef(String id, String name, String model, String idle, String folder, List<Line> greeting,
+    public record NpcDef(String id, String name, String model, String idle, String folder, Speech greeting,
                          Talk talk) {
 
         public NpcDef(String id, String name) {
-            this(id, name, "", "", "", List.of(), Talk.NONE);
+            this(id, name, "", "", "", Speech.NONE, Talk.NONE);
         }
 
         public NpcDef(String id, String name, String model, String idle) {
-            this(id, name, model, idle, "", List.of(), Talk.NONE);
+            this(id, name, model, idle, "", Speech.NONE, Talk.NONE);
         }
     }
 
@@ -54,6 +58,19 @@ public record NpcDoc(List<Folder> folders, List<NpcDef> npcs) {
         public boolean isEmpty() {
             return start.isEmpty() && loop.isEmpty() && end.isEmpty();
         }
+    }
+
+    /** A problem for each quest a greeting's condition names that is not one of {@code questIds}. */
+    public List<String> questErrors(Set<String> questIds) {
+        List<String> errors = new ArrayList<>();
+        for (NpcDef n : npcs) {
+            for (String quest : n.greeting().questsNamed()) {
+                if (!questIds.contains(quest)) {
+                    errors.add(Ids.named("NPC", n.id(), n.name()) + " greeting: quest '" + quest + "' does not exist");
+                }
+            }
+        }
+        return errors;
     }
 
     public NpcDef find(String id) {

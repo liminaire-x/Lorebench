@@ -5,9 +5,9 @@
  */
 package kr.guinnessgroup.lorebench.quest;
 
-import kr.guinnessgroup.lorebench.DialogueLines.Line;
 import kr.guinnessgroup.lorebench.Folders.Folder;
 import kr.guinnessgroup.lorebench.Ids;
+import kr.guinnessgroup.lorebench.Speech;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,8 +58,8 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
     }
 
     /**
-     * What the NPCs say about a quest, each a list of lines shown one page at a time
-     * ({@link kr.guinnessgroup.lorebench.DialogueLines}).
+     * What the NPCs say about a quest, each lines shown one page at a time, or groups of
+     * them picked by condition ({@link Speech}).
      *
      * @param offer    when the giver offers it
      * @param accepted right after the player accepts it (0010)
@@ -67,9 +67,14 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      * @param active   when the player talks to the receiver while it is in progress
      * @param complete when the player hands it in
      */
-    public record Lines(List<Line> offer, List<Line> accepted, List<Line> declined, List<Line> active, List<Line> complete) {
+    public record Lines(Speech offer, Speech accepted, Speech declined, Speech active, Speech complete) {
 
-        public static final Lines NONE = new Lines(List.of(), List.of(), List.of(), List.of(), List.of());
+        public static final Lines NONE = new Lines(Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE, Speech.NONE);
+
+        /** In the order of their keys in the document. */
+        public List<Speech> all() {
+            return List.of(offer, accepted, declined, active, complete);
+        }
     }
 
     /**
