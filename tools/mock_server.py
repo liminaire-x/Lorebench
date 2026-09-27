@@ -5,9 +5,10 @@
 
 Serves editor/dist/index.html (build it first: `npm run build` in editor/) with fixed
 answers for /api/*. POST bodies (publish, quest reset) are saved under build/mock/ so
-you can check what the editor sent. Run from the repository root:
+you can check what the editor sent. Needs only the standard library. Run from the
+repository root:
 
-    .venv/Scripts/python.exe tools/mock_server.py      then open http://127.0.0.1:5174
+    python tools/mock_server.py      then open http://127.0.0.1:5174
 """
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer

@@ -66,7 +66,7 @@
    - **테스트는 비싼 것에 붙인다**: 저장 형식·id처럼 깨지면 데이터가 손상되는 곳은 처음부터 테스트 동반.
 4. 게임 쪽 문제는 **`run/logs/latest.log`부터** 본다. 추측보다 증거.
 5. 에셋(NPC 모델)은 Blockbench MCP + `.claude/skills/`의 Blockbench 스킬(`blockbench-use` 먼저). 에셋 파일은 저장소에 넣지 않는다.
-6. 호출부 파악은 grep/read + CI 컴파일로 한다. graphify는 2026-09-27부터 쓰지 않는다(지금 규모엔 이득이 작다고 사용자 판단, 대규모가 되면 다시 검토).
+6. 호출부 파악은 grep/read + CI 컴파일로 한다.
 
 ## 도구 환경 (에이전트용)
 - **기록은 이 파일에만** 한다. Claude 메모리(`~/.claude/projects/…/memory`)는 쓰지 않는다.
