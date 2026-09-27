@@ -64,7 +64,9 @@
 2. **형식**: `geckolib_model`(GeckoLib 플러그인), **박스 UV**. 그래야 geometry가 GeckoLib이 지원하는 `format_version 1.12.0`으로 나온다.
 3. **텍스처**: UV 배치에 맞춰 스크립트(Node, 외부 라이브러리 없음)로 그리고, 스크립트도 원본으로 보관한다.
 4. **애니메이션**:
-   - 회전 부호는 스크린샷으로 먼저 확인한다(이 형식은 X축 양수가 앞쪽).
+   - 회전 부호는 스크린샷(정면·옆)으로 먼저 확인한다. Blockbench 안에서는 X 양수가 앞쪽(팔을 앞으로, 고개 숙이기).
+   - **내보낸 파일은 X·Y 부호가 뒤집혀 있다**(Blockbench +70 → `.animation.json` -70). 내보낸 파일의 값을 Blockbench에
+     그대로 넣으면 팔이 뒤로 간다. 기존 애니메이션을 참고할 때는 Blockbench 안의 값을 읽는다.
    - 애니메이션 격자(`snapping`)를 키 간격에 맞춘다(0.05초 단위면 20fps). 기본 24fps면 0.8초가 0.7917초로 밀려 반복 이음새가 어긋난다.
    - 시작·중간·끝 자세와 반복 이음새를 확인한다. 시작 자세 하나로는 동작을 검증할 수 없다.
 5. **내보내기**:
@@ -78,3 +80,11 @@
 - `create_animation`은 이름 앞에 `animation.`을 붙인다. `chief.happy`로 넘기면 `animation.chief.happy`가 된다.
 - 키프레임 편집은 **애니메이션 모드**에서만 된다. 모드를 바꾸고 애니메이션을 선택한 뒤 편집한다.
 - 등록된 형식 목록을 주는 전용 도구가 없다. 프로젝트가 열린 상태에서 `risky_eval`로 `Object.keys(Formats)`를 읽는다(프로젝트가 없으면 실행 도구가 실패한다).
+- 프로젝트가 없으면 편집·스크린샷 도구가 꺼져 있고 도구 검색에도 안 나온다. 그때는 `risky_eval`로 한다(대화 몸짓 에셋 때 쓴 방법):
+  - 열기: `Blockbench.read([경로], {readtype:'text'}, files => loadModelFile(files[0]))`
+  - 애니메이션 만들기: `new Animation({name, loop, length, snapping: 20}).add(false)` → `anim.getBoneAnimator(group).addKeyframe({channel, time, interpolation, data_points: [{x, y, z}]})`,
+    `Undo.initEdit`·`finishEdit`로 감싼다.
+  - 자세 보기: `anim.select()` → `Timeline.setTime(t)` → `Animator.preview()`, 카메라는 `Preview.selected.camera.position.set(…)` +
+    `controls.target.set(…)` + `controls.update()`, 그다음 `capture_app_screenshot`. 모델은 -Z가 앞(얼굴 쪽).
+  - 내보내기·저장: `Format.animation_codec.compileFile(Animation.all)`을 탭 들여쓰기 JSON으로, `.bbmodel`은 `Codecs.project.compile()`,
+    둘 다 `require('fs').writeFileSync`. 저장 뒤 `Project.saved = true`.

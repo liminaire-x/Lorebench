@@ -71,6 +71,10 @@
 - **게임 데이터(git 밖)**: 실행 환경의 기본 경로는 [docs/workflow.md](docs/workflow.md) "게임 실행 환경". 그 밖에:
   - 테스트 리소스팩 `run/resourcepacks/lorebench-test/`: 에셋 `assets/lorebench/…`, 원본 `source/chief.bbmodel`·`source/chief-texture.mjs`. 서버·두 클라이언트의 `options.txt` 세 곳에서 켜져 있다.
 - **Python**: 저장소 최상위 `.venv/Scripts/python.exe`(3.14, git 밖, graphify·openai 포함). Bash의 `python`은 PATH에 없고, pip은 `-m pip`로.
+  - 오래 도는 것(가짜 API 서버 `tools/mock_server.py` 등)은 Bash `run_in_background`로 띄우고 **`TaskStop`으로 끈다**.
+    `taskkill /IM python.exe`는 PC의 모든 파이썬(사용자의 다른 작업 포함)을 끈다(실제로 한 번 그랬다).
+  - 가짜 서버가 `build/mock/`에 쓴 publish 본문에서 고정 응답에 있던 한글(NPC 이름 `농부`)은 깨져 보였다(에디터에서 입력한
+    한글은 멀쩡함, 원인 미확인). 에디터 확인은 칸 구조만 본다.
 - **graphify**:
   - 문서 추출은 **서브에이전트를 쓰지 않고 외부 AI(Gemini)**로: `graphify.llm.extract_corpus_parallel(files, backend="gemini")`. 키는 사용자 환경변수 `GEMINI_API_KEY`(값은 어디에도 적지 않음).
   - Gemini 무료 등급은 한도가 작다(분당 요청 5회 등, 503 과부하도 잦음). **`token_budget=5000`, `deep_mode=True`, `max_concurrency=1`**(20000으로 크게 묶으면 문서마다 제목 노드 하나뿐이었다). 그래도 실패하면 **코드(AST)만 빌드**하고 나중에 `--update`(실패한 문서는 다음에 다시 추출 대상). `.claude/skills/`의 Blockbench 문서는 프로젝트 문서가 아니라 추출에서 뺀다(그래서 늘 "미추출 10개"로 남는다).
