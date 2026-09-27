@@ -45,6 +45,13 @@
     선택 칸(select)은 `form_input`이 먹는다.
   - 칸 비우기는 세 번 클릭 + Delete가 안 먹을 때가 있다 → 클릭 + `ctrl+a` + BackSpace.
   - 흐린 예시 글자(placeholder)를 입력값으로 오독하지 말고, 넣은 값은 JS로 `value`를 읽어 확인한다.
+  - 버튼·`window.confirm`도 그 탭에서만 대신 채운다(`window.confirm = (m) => m.includes("'지울 것'")`처럼 대상을 확인하는 식으로).
+  - 패널이 가려져 있으면(화면 크기 0) 좌표 클릭이 안 되고, 포커스 이벤트와 `requestAnimationFrame`이 멈춘다. 스크립트로
+    `focus()`·`click()`하고 입력은 `document.execCommand('insertText', …)`(React가 실제 타이핑처럼 받음)로 한다. 에디터 코드가
+    포커스 이벤트나 rAF에 기대면 여기서 드러난다(표시 버튼이 엉뚱한 줄에 들어간 버그, 조각 3).
+  - **서버를 다시 켜지 않고 새 에디터 보기**: `npx vite build --outDir <스크래치패드>/editor-build`로 빌드하고, 그 `index.html`을
+    내어 주고 `/api/*`는 8080으로 넘기는 표준 라이브러리 파이썬 서버를 8090에 띄운다(Bash `run_in_background`, 끝나면 `TaskStop`).
+    publish까지 실제 서버로 간다. 시험 입력은 끝나면 되돌리고, 먼저 복사해 둔 `npcs.json`·`quests.json`과 `diff`로 같은지 본다.
 
 ## 게임 확인 체크리스트 형식
 
