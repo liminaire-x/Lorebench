@@ -66,7 +66,7 @@
    - **테스트는 비싼 것에 붙인다**: 저장 형식·id처럼 깨지면 데이터가 손상되는 곳은 처음부터 테스트 동반.
 4. 게임 쪽 문제는 **`run/logs/latest.log`부터** 본다. 추측보다 증거.
 5. 에셋(NPC 모델)은 Blockbench MCP + `.claude/skills/`의 Blockbench 스킬(`blockbench-use` 먼저). 에셋 파일은 저장소에 넣지 않는다.
-6. 광범위 변경 전에는 graphify로 호출부를 먼저 파악할 수 있다(국소 변경은 grep/read).
+6. 호출부 파악은 grep/read + CI 컴파일로 한다. graphify는 2026-09-27부터 쓰지 않는다(지금 규모엔 이득이 작다고 사용자 판단, 대규모가 되면 다시 검토).
 
 ## 도구 환경 (에이전트용)
 - **기록은 이 파일에만** 한다. Claude 메모리(`~/.claude/projects/…/memory`)는 쓰지 않는다.
@@ -78,12 +78,7 @@
     `taskkill /IM python.exe`는 PC의 모든 파이썬(사용자의 다른 작업 포함)을 끈다(실제로 한 번 그랬다).
   - 가짜 서버가 `build/mock/`에 쓴 publish 본문에서 고정 응답에 있던 한글(NPC 이름 `농부`)은 깨져 보였다(에디터에서 입력한
     한글은 멀쩡함, 원인 미확인). 에디터 확인은 칸 구조만 본다.
-- **graphify**:
-  - 문서 추출은 **서브에이전트를 쓰지 않고 외부 AI(Gemini)**로: `graphify.llm.extract_corpus_parallel(files, backend="gemini")`. 키는 사용자 환경변수 `GEMINI_API_KEY`(값은 어디에도 적지 않음).
-  - Gemini 무료 등급은 한도가 작다(분당 요청 5회, **하루 20회**(`gemini-3-flash`), 503 과부하도 잦음. 하루 한도에 걸리면 429 `GenerateRequestsPerDayPerProjectPerModel`: 다음 날 `--update`). **`token_budget=5000`, `deep_mode=True`, `max_concurrency=1`**(20000으로 크게 묶으면 문서마다 제목 노드 하나뿐이었다). 그래도 실패하면 **코드(AST)만 빌드**하고 나중에 `--update`(실패한 문서는 다음에 다시 추출 대상). `.claude/skills/`의 Blockbench 문서는 프로젝트 문서가 아니라 추출에서 뺀다(그래서 늘 "미추출 10개"로 남는다).
   - 중간 단계 파이썬은 스크래치패드에 `.py`로 써서 실행하고 `if __name__ == '__main__':`를 둔다. 인라인 heredoc + `Remove-Item`을 한 PowerShell 호출에 이으면 조용히 실패한다.
-  - `graphify-out/`은 git 밖. 마지막 빌드: 2026-09-27(목걸이 이야기 뒤, `--update`), 1312 노드·3289 연결·129 묶음, 중심 = `Quests`·`NpcEntity`·`LorebenchRuntime`·`DialogueScreen`·`Speech`. 0012 결정 기록은 Gemini 하루 한도로 미추출(다음 `--update`에서 자동 재시도). 문서 추출은 여전히 얕다(개념 일부만). 묶음 이름은 자동(중심 노드 + 주 파일).
-  - `graphify export html` CLI는 이 환경에서 아무 말 없이 실패한다(exit 1) → `graphify.export.to_html(G, communities, 'graphify-out/graph.html', community_labels=labels)`로 직접 쓴다.
 - **셸 함정**: `sed` 치환에 `#` 구분자를 쓰면 `#minecraft:logs`, `## 제목`과 충돌한다. 파일 수정은 Edit 도구를 먼저, 셸 치환이 꼭 필요하면 `|` 구분자. 긴 파이썬 스크립트(특히 JSX·자바 코드가 든 수정 스크립트)는 **Bash heredoc으로 파일을 쓰는 것 자체**가 따옴표를 잘못 읽어 실패한다 → **Write 도구로** 스크래치패드에 `.py`를 쓰고 Bash로 실행(토큰은 거의 같고, 실패해 다시 쓰는 비용이 훨씬 큼). 수정은 `rep(old, new)` + `assert count == 1`로. 작업 사본은 CRLF라, 스크립트는 파일을 **줄바꿈을 가리지 않고 읽고**(`open(p, encoding='utf-8')`)
   **`newline='\n'`으로 쓴다**(그러지 않으면 여러 줄 `old`가 안 맞는다. git이 커밋 때 맞춰 준다). sed로 `x.isEmpty()` 같은 걸 바꿀 땐
   **`!`가 붙은 자리를 먼저 grep**한다(`!x.isEmpty()`가 `!x.size() == 0`이 되어 CI 컴파일이 실패한 적 있음).

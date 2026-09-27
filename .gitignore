@@ -23,7 +23,5 @@ run
 editor/node_modules
 editor/dist
 
-# graphify folder
-graphify-out
 # Session handoff notes (local only)
 docs/handoff.md
