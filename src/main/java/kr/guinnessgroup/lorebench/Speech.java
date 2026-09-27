@@ -210,7 +210,7 @@ public record Speech(List<Group> groups) {
         if (isCount(e)) {
             return Range.exactly(e.getAsInt());
         }
-        if (e != null && e.isJsonObject() && !e.getAsJsonObject().size() == 0) {
+        if (e != null && e.isJsonObject() && e.getAsJsonObject().size() > 0) {
             JsonObject o = e.getAsJsonObject();
             boolean ok = o.keySet().stream().allMatch(RANGE_KEYS::contains)
                     && (!o.has("min") || isCount(o.get("min"))) && (!o.has("max") || isCount(o.get("max")));
