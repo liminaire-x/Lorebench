@@ -48,14 +48,17 @@ export function LineList({ lines = [], onChange, placeholder }) {
   const [at, setAt] = useState(null)
   const set = (i, text, animation, loop) => onChange(lines.map((l, j) => (j === i ? makeLine(text, animation, loop) : l)))
   const insertCue = ([cue, from, to]) => {
-    const i = at !== null && at < lines.length ? at : lines.length - 1
+    // The line with the cursor right now (the buttons don't take the focus), else the last one
+    // that had it, else the last line.
+    const focused = areas.current.indexOf(document.activeElement)
+    const i = focused >= 0 && focused < lines.length ? focused : at !== null && at < lines.length ? at : lines.length - 1
     const area = areas.current[i]
     if (i < 0 || !area) return
     const text = lineText(lines[i])
     const start = area.selectionStart ?? text.length
     const end = area.selectionEnd ?? start
     set(i, text.slice(0, start) + cue + text.slice(end), lineAnimation(lines[i]), lineLoops(lines[i]))
-    requestAnimationFrame(() => { area.focus(); area.setSelectionRange(start + from, start + to) })
+    setTimeout(() => { area.focus(); area.setSelectionRange(start + from, start + to) })
   }
   return (
     <div>
