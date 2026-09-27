@@ -44,6 +44,30 @@ public final class NpcRenderer extends EntityRenderer<NpcEntity> {
     @Override
     public void render(NpcEntity entity, float entityYaw, float partialTick, PoseStack poseStack,
                        MultiBufferSource buffer, int packedLight) {
+        if (!entity.isTurned()) {
+            draw(entity, entityYaw, partialTick, poseStack, buffer, packedLight);
+            return;
+        }
+        // Turned toward the player talking to it (0011): both renderers read these fields, so
+        // draw with the turned way and put its real rotation back right after.
+        float body = entity.yBodyRot;
+        float bodyO = entity.yBodyRotO;
+        float head = entity.yHeadRot;
+        float headO = entity.yHeadRotO;
+        float yaw = entity.turnedYaw(partialTick);
+        entity.yBodyRot = entity.yBodyRotO = entity.yHeadRot = entity.yHeadRotO = yaw;
+        try {
+            draw(entity, entityYaw, partialTick, poseStack, buffer, packedLight);
+        } finally {
+            entity.yBodyRot = body;
+            entity.yBodyRotO = bodyO;
+            entity.yHeadRot = head;
+            entity.yHeadRotO = headO;
+        }
+    }
+
+    private void draw(NpcEntity entity, float entityYaw, float partialTick, PoseStack poseStack,
+                      MultiBufferSource buffer, int packedLight) {
         if (NpcGeoModel.isAvailable(entity.model())) {
             geo.render(entity, entityYaw, partialTick, poseStack, buffer, packedLight);
         } else {

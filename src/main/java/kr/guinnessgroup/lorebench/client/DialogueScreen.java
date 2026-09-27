@@ -163,11 +163,11 @@ final class DialogueScreen extends Screen {
         }
     }
 
-    /** The NPC's talk set plays on this screen while the screen is open (0011). */
+    /** While the screen is open the NPC plays its talk set and turns to this player, on this screen (0011). */
     private void setTalking(boolean talking) {
         NpcEntity npc = npc();
         if (npc != null) {
-            npc.setTalking(talking);
+            npc.setTalking(talking ? minecraft.player : null);
         }
     }
 

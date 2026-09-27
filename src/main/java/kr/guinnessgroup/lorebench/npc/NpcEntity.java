@@ -12,6 +12,7 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
@@ -81,6 +82,15 @@ public class NpcEntity extends PathfinderMob implements GeoEntity {
     private record LineRequest(String animation, boolean loop) {}
     /** Client: whether this player's dialogue screen is open on this NPC, see {@link #setTalking}. */
     private volatile boolean talkWanted;
+    /** Client: the player talking to this NPC on this screen, or null. */
+    private Entity talkingTo;
+
+    /** Degrees per tick the NPC turns toward the talking player and back (a half turn in about half a second). */
+    private static final float TURN_SPEED = 18f;
+    /** Client: turned away from where it faces, toward the talking player or on its way back. */
+    private boolean turned;
+    private float turnYaw;
+    private float turnYawO;
 
     public NpcEntity(EntityType<? extends NpcEntity> type, Level level) {
         super(type, level);
@@ -131,12 +141,23 @@ public class NpcEntity extends PathfinderMob implements GeoEntity {
     }
 
     /**
-     * Client: this player's dialogue screen opened ({@code true}) or closed on this NPC.
-     * The NPC plays its talk set on this screen only. Opening and closing before the next
-     * frame cancel out.
+     * Client: this player's dialogue screen opened on this NPC (with that player), or closed
+     * ({@code null}). On this screen only, the NPC plays its talk set and turns toward the
+     * player, then back. Opening and closing before the next frame cancel out.
      */
-    public void setTalking(boolean talking) {
-        talkWanted = talking;
+    public void setTalking(Entity player) {
+        talkingTo = player;
+        talkWanted = player != null;
+    }
+
+    /** Client: whether the NPC is drawn turned away from where it faces, see {@link #turnedYaw}. */
+    public boolean isTurned() {
+        return turned;
+    }
+
+    /** Client: the way its body and head face while turned. Drawn only, never sent anywhere. */
+    public float turnedYaw(float partialTick) {
+        return Mth.rotLerp(partialTick, turnYawO, turnYaw);
     }
 
     /**
@@ -151,8 +172,32 @@ public class NpcEntity extends PathfinderMob implements GeoEntity {
     @Override
     public void tick() {
         super.tick();
-        if (!level().isClientSide && tickCount % 20 == 1) {
+        if (level().isClientSide) {
+            turnTick();
+        } else if (tickCount % 20 == 1) {
             followRecord();
+        }
+    }
+
+    /**
+     * Client: turns toward the talking player, and back to where it faces once the talk is
+     * over. Kept apart from its real rotation, which the server sends now and then.
+     */
+    private void turnTick() {
+        Entity with = talkingTo;
+        if (with == null && !turned) {
+            return;
+        }
+        if (!turned) {
+            turned = true;
+            turnYaw = yBodyRot;
+        }
+        float target = with == null ? yBodyRot
+                : (float) (Mth.atan2(with.getZ() - getZ(), with.getX() - getX()) * Mth.RAD_TO_DEG) - 90f;
+        turnYawO = turnYaw;
+        turnYaw = Mth.approachDegrees(turnYaw, target, TURN_SPEED);
+        if (with == null && Mth.degreesDifferenceAbs(turnYaw, yBodyRot) < 1f) {
+            turned = false;
         }
     }
 
