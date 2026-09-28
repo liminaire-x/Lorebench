@@ -32,7 +32,10 @@ API = {
          'stages': [{'id': 'stage_farm0001', 'text': 'wheat',
                      'goals': [{'harvest': 'minecraft:wheat', 'count': 10}]},
                     {'id': 'stage_farm0002', 'text': 'tell', 'to': NPC}],
-         'rewards': [{'item': 'minecraft:iron_hoe', 'count': 1}]}]},
+         'rewards': [{'item': 'minecraft:iron_hoe', 'count': 1}]},
+        {'id': 'quest_cows0001', 'title': 'cows', 'giver': NPC,
+         'stages': [{'id': 'stage_cows0001', 'text': 'breed', 'goals': [{'breed': 'minecraft:cow', 'count': 2}]}],
+         'rewards': []}]},
     '/api/players': {'players': ['Dev1']},
     '/api/held-item': {'item': 'minecraft:iron_sword[custom_name=\'"Blade"\']'},
     '/api/crops': {'crops': [{'id': 'minecraft:wheat', 'name': 'Wheat Crops'},
@@ -42,7 +45,7 @@ API = {
     '/api/quest-players': {'players': [
         {'uuid': '00000000-0000-0000-0000-000000000001', 'name': 'Dev1', 'online': True, 'state': 'done', 'progress': {}},
         {'uuid': '00000000-0000-0000-0000-000000000002', 'name': 'Dev2', 'online': False, 'state': 'active',
-         'progress': {'harvest:minecraft:wheat': 3}}]},
+         'progress': {'harvest:minecraft:wheat': 3}, 'stage': 'stage_farm0001'}]},
 }
 POSTS = {'/api/publish': ('publish.json', {'accepted': True}), '/api/quest-reset': ('quest-reset.json', {'ok': True})}
 

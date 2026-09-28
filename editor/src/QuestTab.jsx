@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { newId } from './ids.js'
 import { FolderPanel, FolderSelect, FolderTree, addFolder, byText, folderPath, placeIn } from './FolderTree.jsx'
 import { Section, SpeechEditor } from './Section.jsx'
+import { ContextMenu, StageRows, moveStage, movedId, playersOn, stageIds, usesQuestItems, whoIsOn } from './Stages.jsx'
 
 const input = { width: '100%', padding: '4px 6px', boxSizing: 'border-box' }
 const label = { display: 'block', marginBottom: 12 }
@@ -244,21 +245,21 @@ function QuestPlayers({ quest, setMessage }) {
   )
 }
 
-// The quest tab: a folder tree on the left, the chosen quest or folder on the right.
+// The quest tab: a folder tree on the left, the chosen quest (its stages under it), stage or
+// folder on the right.
 export default function QuestTab({ quests, setQuests, folders, setFolders, npcs, status, setMessage, hidden }) {
-  const [selected, setSelected] = useState(null) // { kind: 'item' | 'folder', id }
+  const [selected, setSelected] = useState(null) // { kind: 'item' | 'folder', id }, or a stage { kind: 'stage', id, item }
   const [collapsed, setCollapsed] = useState(() => new Set()) // folder ids
   const [players, setPlayers] = useState([]) // online, for "use held item"
   const [heldPlayer, setHeldPlayer] = useState(() => {
     try { return localStorage.getItem('lorebench.heldPlayer') || '' } catch (e) { return '' }
   })
 
-  const quest = selected?.kind === 'item' ? quests.find((q) => q.id === selected.id) || null : null
+  // The chosen quest, or the quest of the chosen stage (0015), which shows its stages in the tree.
+  const quest = selected?.kind === 'item' || selected?.kind === 'stage'
+    ? quests.find((q) => q.id === (selected.item ?? selected.id)) || null : null
+  const stage = selected?.kind === 'stage' ? (quest?.stages || []).find((st) => st.id === selected.id) || null : null
   const folder = selected?.kind === 'folder' ? folders.find((f) => f.id === selected.id) || null : null
-  // The stage being edited (0015): the chosen one, else the first.
-  const [stageId, setStageId] = useState(null)
-  const stages = quest?.stages || []
-  const stage = stages.find((st) => st.id === stageId) || stages[0] || null
 
   // Where "+ Folder" and "+ Quest" put the new thing: the chosen folder, or the chosen quest's folder.
   const target = folder?.id ?? quest?.folder ?? ''
@@ -309,7 +310,7 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
     const title = window.prompt('Quest title:')
     if (title == null || !title.trim()) return
     const id = newId('quest', quests.map((q) => q.id))
-    const stage = { id: newId('stage', quests.flatMap((q) => (q.stages || []).map((st) => st.id))), text: '' }
+    const stage = { id: newId('stage', stageIds(quests)), text: '' }
     setQuests((qs) => qs.concat(placeIn({ id, title: title.trim(), stages: [stage], rewards: [] }, target)))
     setSelected({ kind: 'item', id })
   }
@@ -374,6 +375,77 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
     setSelected(null)
   }
 
+  // Stages in the tree (0015): drag to reorder or onto another quest, right-click to add or delete.
+  const [drag, setDrag] = useState(null) // { quest, stage } being dragged
+  const [dropAt, setDropAt] = useState(null) // { quest, index } where it would land
+  const [menu, setMenu] = useState(null)
+  const closeMenu = useCallback(() => setMenu(null), [])
+  const stageName = (q, st) => `stage ${q.stages.indexOf(st) + 1} '${st.text || '(no text)'}'`
+
+  const addStage = (q) => {
+    const text = window.prompt(`New stage of '${q.title}', what to do:`)
+    if (text == null) return
+    const id = newId('stage', stageIds(quests))
+    setQuests((qs) => qs.map((x) => (x.id !== q.id ? x : { ...x, stages: [...(x.stages || []), { id, text: text.trim() }] })))
+    setSelected({ kind: 'stage', id, item: q.id })
+  }
+
+  const deleteStage = async (q, st) => {
+    if (q.stages.length === 1) {
+      setMessage({ ok: false, text: `'${q.title}' needs at least one stage; delete the quest instead.` })
+      return
+    }
+    const count = await playersOn(q.id, st.id)
+    if (!window.confirm(`Delete ${stageName(q, st)} of '${q.title}'?\n\n${whoIsOn(count, q.title)}`)) return
+    setQuests((qs) => qs.map((x) => (x.id !== q.id ? x : { ...x, stages: x.stages.filter((s) => s.id !== st.id) })))
+    setSelected({ kind: 'item', id: q.id })
+  }
+
+  // A dragged stage dropped at `index` of quest `to`. Into another quest it asks first: players
+  // on it stay behind, and its quest items are marked with the quest it leaves.
+  const dropStage = async (to, index) => {
+    const d = drag
+    setDrag(null)
+    setDropAt(null)
+    const from = d && quests.find((q) => q.id === d.quest)
+    const st = from?.stages.find((s) => s.id === d.stage)
+    if (!st) return
+    if (d.quest !== to) {
+      const target = quests.find((q) => q.id === to)
+      if (from.stages.length === 1) {
+        setMessage({ ok: false, text: `'${from.title}' needs at least one stage.` })
+        return
+      }
+      const count = await playersOn(from.id, st.id)
+      const items = usesQuestItems(st)
+        ? `\n\nIts quest items are marked with '${from.title}': in '${target.title}' they won't count.` : ''
+      if (!window.confirm(`Move ${stageName(from, st)} to '${target.title}'? Its players don't follow it.\n\n`
+        + whoIsOn(count, from.title) + items)) return
+    }
+    const id = movedId(quests, d.quest, d.stage, to)
+    setQuests((qs) => moveStage(qs, d.quest, d.stage, to, index, id))
+    setSelected({ kind: 'stage', id, item: to })
+  }
+
+  // A quest's row in the tree: right-click to add a stage, and a place to drop one (at its end).
+  const questRow = (item) => {
+    const q = quests.find((x) => x.id === item.id)
+    const end = (q?.stages || []).length
+    return {
+      onContextMenu: (e) => {
+        e.preventDefault()
+        setMenu({ x: e.clientX, y: e.clientY, items: [{ label: 'Add stage', run: () => addStage(q) }] })
+      },
+      onDragOver: (e) => {
+        if (!drag) return
+        e.preventDefault()
+        if (!(dropAt?.quest === item.id && dropAt.index === end)) setDropAt({ quest: item.id, index: end })
+      },
+      onDrop: (e) => { e.preventDefault(); if (dropAt) dropStage(dropAt.quest, dropAt.index) },
+      style: drag && dropAt?.quest === item.id && item.id !== quest?.id ? { outline: '2px solid #2563eb' } : {},
+    }
+  }
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: hidden ? 'none' : 'flex' }}>
       <aside style={{ width: 260, borderRight: '1px solid #ddd', display: 'flex', flexDirection: 'column', fontSize: 12 }}>
@@ -389,21 +461,96 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                 folders={folders} selected={selected} onSelect={setSelected}
                 collapsed={collapsed} setCollapsed={setCollapsed}
                 items={quests.map((q) => ({ id: q.id, label: q.title, folder: q.folder }))}
+                itemProps={questRow}
+                itemChildren={(item, depth) => item.id === quest?.id && (
+                  <StageRows
+                    quest={quest} depth={depth} selected={selected} onSelect={setSelected}
+                    drag={drag} setDrag={setDrag} dropAt={dropAt} setDropAt={setDropAt} onDrop={dropStage}
+                    onMenu={(e, q, st) => setMenu({
+                      x: e.clientX, y: e.clientY, items: [{ label: 'Delete stage', danger: true, run: () => deleteStage(q, st) }],
+                    })}
+                  />
+                )}
               />
             )}
         </div>
+        <ContextMenu menu={menu} onClose={closeMenu} />
       </aside>
 
       <main style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '16px 24px', fontSize: 13 }}>
         <div style={{ maxWidth: 680 }}>
-          {quest ? (
+          {stage ? (
+            <>
+              <div style={{ ...hint, marginBottom: 4 }}>
+                <span onClick={() => setSelected({ kind: 'item', id: quest.id })} style={{ cursor: 'pointer', textDecoration: 'underline' }}>{quest.title}</span>
+                {' › '}stage {quest.stages.indexOf(stage) + 1} of {quest.stages.length}
+              </div>
+              <label style={label}>
+                <div style={{ marginBottom: 3 }}>Text <span style={hint}>(what to do, a line in the quest screen)</span></div>
+                <input value={stage.text ?? ''} placeholder="e.g. 촌장에게 밀 가져가기" onChange={(e) => setStageField('text', e.target.value)} style={{ ...input, fontSize: 15 }} />
+              </label>
+              <div style={{ ...hint, marginBottom: 12 }}>id: {stage.id} (fixed; players' records name the stage they are on by it)</div>
+              <Section title="Stage">
+                <label style={label}>
+                  <div style={{ marginBottom: 3 }}>Go to <span style={hint}>(the NPC it is done with)</span></div>
+                  <select value={stage.to ?? ''} onChange={(e) => setStageField('to', e.target.value)} style={input}>
+                    <option value="">(the giver)</option>
+                    {npcOptions}
+                  </select>
+                </label>
+                <label style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+                  <span>✋ held item of</span>
+                  <select value={heldPlayer} onChange={(e) => pickHeldPlayer(e.target.value)} style={{ flex: 1, padding: '3px 2px' }}>
+                    <option value="">(player)</option>
+                    {(players.includes(heldPlayer) || !heldPlayer ? players : [heldPlayer, ...players]).map((p) => (
+                      <option key={p} value={p}>{p}{players.includes(p) ? '' : ' (offline)'}</option>
+                    ))}
+                  </select>
+                  <button onClick={loadPlayers} title="Refresh online players" style={{ cursor: 'pointer' }}>↻</button>
+                </label>
+                <div style={{ ...hint, marginBottom: 10 }}>
+                  In a need, only the listed parts must match. Delete damage=… to accept any wear.
+                </div>
+                <div style={{ marginBottom: 3 }}>
+                  Needs <span style={hint}>(all of them, in this order; none = just talk to the NPC. Kill, harvest and breed count from 0 in each stage; collect items drop only during this stage, for that player only)</span>
+                </div>
+                <StackList goals fetchHeld={fetchHeld} lists={lists} stacks={stage.goals || []} onChange={(v) => setStageField('goals', v)} />
+                <label style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 10 }}>
+                  <span>Wait</span>
+                  <input type="number" min="1" value={stage.wait?.days ?? ''} placeholder="none" onChange={(e) => setWait(e.target.value)}
+                    style={{ width: 60, padding: '3px 4px' }} />
+                  <span>days</span>
+                  <span style={hint}>(after Hand over; it goes on once this many mornings pass, 6:00 or waking up. Empty = right away)</span>
+                </label>
+                <div style={{ marginBottom: 3 }}>
+                  Gives <span style={hint}>(when the stage is done, after its wait; seen only when given. Tick quest item for the story's own things, e.g. a mended necklace to deliver)</span>
+                </div>
+                <StackList wide gifts fetchHeld={fetchHeld} stacks={stage.gives || []} onChange={(v) => setStageField('gives', v)} />
+                <div style={{ margin: '10px 0 3px' }}>In progress <span style={hint}>(the stage's NPC; with no lines the quest shows but can't be chosen)</span></div>
+                <SpeechEditor value={stage.lines?.active} onChange={(v) => setStageLines('active', v)} placeholder="아직 부족하구먼." inQuest quests={quests} />
+                <div style={{ margin: '10px 0 3px' }}>Hand in <span style={hint}>(the stage's NPC, before Hand over; with no needs, the talk itself)</span></div>
+                <SpeechEditor value={stage.lines?.complete} onChange={(v) => setStageLines('complete', v)} placeholder="고맙네!" inQuest quests={quests} />
+                <div style={{ margin: '10px 0 3px' }}>After handing over <span style={hint}>(the stage's NPC, right after Hand over: where to go next, or to come back after the wait)</span></div>
+                <SpeechEditor value={stage.lines?.handed} onChange={(v) => setStageLines('handed', v)} placeholder="칼을 벼리는 데 하루는 걸리네. 내일 오게." inQuest quests={quests} />
+                <div style={{ ...hint, margin: '12px 0 0' }}>With a wait:</div>
+                <div style={{ margin: '4px 0 3px' }}>While waiting <span style={hint}>(the stage's NPC; with no lines the quest shows but can't be chosen)</span></div>
+                <SpeechEditor value={stage.lines?.waiting} onChange={(v) => setStageLines('waiting', v)} placeholder="아직 망치질 중일세." inQuest quests={quests} />
+                <div style={{ margin: '10px 0 3px' }}>When it's ready <span style={hint}>(the stage's NPC, before Take)</span></div>
+                <SpeechEditor value={stage.lines?.ready} onChange={(v) => setStageLines('ready', v)} placeholder="다 됐네! 받게." inQuest quests={quests} />
+              </Section>
+              <button onClick={() => deleteStage(quest, stage)} style={{ padding: '5px 10px', cursor: 'pointer', color: '#c0392b' }}>Delete stage</button>
+            </>
+          ) : quest ? (
             <>
               <div style={{ ...hint, marginBottom: 4 }}>{quest.folder ? folderPath(folders, quest.folder) : '(top)'}</div>
               <label style={label}>
                 <div style={{ marginBottom: 3 }}>Title</div>
                 <input value={quest.title} onChange={(e) => setQuestField('title', e.target.value)} style={{ ...input, fontSize: 15 }} />
               </label>
-              <div style={{ ...hint, marginBottom: 12 }}>id: {quest.id} (fixed)</div>
+              <div style={{ ...hint, marginBottom: 12 }}>
+                id: {quest.id} (fixed) · {quest.stages?.length || 0} stage{quest.stages?.length === 1 ? '' : 's'} under it on the left:
+                click one to edit it, drag to reorder or onto another quest, right-click the quest to add one.
+              </div>
 
               <Section title="Basics">
                 <label style={label}>
@@ -471,68 +618,6 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                 <SpeechEditor value={quest.lines?.declined} onChange={(v) => setLines('declined', v)} placeholder="그래… 무리한 부탁이지." inQuest quests={quests} />
               </Section>
 
-              {stage && (
-                <Section title="Stage">
-                  {stages.length > 1 && (
-                    <label style={label}>
-                      <select value={stage.id} onChange={(e) => setStageId(e.target.value)} style={input}>
-                        {stages.map((st, i) => <option key={st.id} value={st.id}>{i + 1}. {st.text || '(no text)'}</option>)}
-                      </select>
-                    </label>
-                  )}
-                  <div style={{ ...hint, marginBottom: 8 }}>id: {stage.id} (fixed; players' records name the stage they are on by it)</div>
-                  <label style={label}>
-                    <div style={{ marginBottom: 3 }}>Text <span style={hint}>(what to do, a line in the quest screen)</span></div>
-                    <input value={stage.text ?? ''} placeholder="e.g. 촌장에게 밀 가져가기" onChange={(e) => setStageField('text', e.target.value)} style={input} />
-                  </label>
-                  <label style={label}>
-                    <div style={{ marginBottom: 3 }}>Go to <span style={hint}>(the NPC it is done with)</span></div>
-                    <select value={stage.to ?? ''} onChange={(e) => setStageField('to', e.target.value)} style={input}>
-                      <option value="">(the giver)</option>
-                      {npcOptions}
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
-                    <span>✋ held item of</span>
-                    <select value={heldPlayer} onChange={(e) => pickHeldPlayer(e.target.value)} style={{ flex: 1, padding: '3px 2px' }}>
-                      <option value="">(player)</option>
-                      {(players.includes(heldPlayer) || !heldPlayer ? players : [heldPlayer, ...players]).map((p) => (
-                        <option key={p} value={p}>{p}{players.includes(p) ? '' : ' (offline)'}</option>
-                      ))}
-                    </select>
-                    <button onClick={loadPlayers} title="Refresh online players" style={{ cursor: 'pointer' }}>↻</button>
-                  </label>
-                  <div style={{ ...hint, marginBottom: 10 }}>
-                    In a need, only the listed parts must match. Delete damage=… to accept any wear.
-                  </div>
-                  <div style={{ marginBottom: 3 }}>
-                    Needs <span style={hint}>(all of them, in this order; none = just talk to the NPC. Kill, harvest and breed count from 0 in each stage; collect items drop only during this stage, for that player only)</span>
-                  </div>
-                  <StackList goals fetchHeld={fetchHeld} lists={lists} stacks={stage.goals || []} onChange={(v) => setStageField('goals', v)} />
-                  <label style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 10 }}>
-                    <span>Wait</span>
-                    <input type="number" min="1" value={stage.wait?.days ?? ''} placeholder="none" onChange={(e) => setWait(e.target.value)}
-                      style={{ width: 60, padding: '3px 4px' }} />
-                    <span>days</span>
-                    <span style={hint}>(after Hand over; it goes on once this many mornings pass, 6:00 or waking up. Empty = right away)</span>
-                  </label>
-                  <div style={{ marginBottom: 3 }}>
-                    Gives <span style={hint}>(when the stage is done, after its wait; seen only when given. Tick quest item for the story's own things, e.g. a mended necklace to deliver)</span>
-                  </div>
-                  <StackList wide gifts fetchHeld={fetchHeld} stacks={stage.gives || []} onChange={(v) => setStageField('gives', v)} />
-                  <div style={{ margin: '10px 0 3px' }}>In progress <span style={hint}>(the stage's NPC; with no lines the quest shows but can't be chosen)</span></div>
-                  <SpeechEditor value={stage.lines?.active} onChange={(v) => setStageLines('active', v)} placeholder="아직 부족하구먼." inQuest quests={quests} />
-                  <div style={{ margin: '10px 0 3px' }}>Hand in <span style={hint}>(the stage's NPC, before Hand over; with no needs, the talk itself)</span></div>
-                  <SpeechEditor value={stage.lines?.complete} onChange={(v) => setStageLines('complete', v)} placeholder="고맙네!" inQuest quests={quests} />
-                  <div style={{ margin: '10px 0 3px' }}>After handing over <span style={hint}>(the stage's NPC, right after Hand over: where to go next, or to come back after the wait)</span></div>
-                  <SpeechEditor value={stage.lines?.handed} onChange={(v) => setStageLines('handed', v)} placeholder="칼을 벼리는 데 하루는 걸리네. 내일 오게." inQuest quests={quests} />
-                  <div style={{ ...hint, margin: '12px 0 0' }}>With a wait:</div>
-                  <div style={{ margin: '4px 0 3px' }}>While waiting <span style={hint}>(the stage's NPC; with no lines the quest shows but can't be chosen)</span></div>
-                  <SpeechEditor value={stage.lines?.waiting} onChange={(v) => setStageLines('waiting', v)} placeholder="아직 망치질 중일세." inQuest quests={quests} />
-                  <div style={{ margin: '10px 0 3px' }}>When it's ready <span style={hint}>(the stage's NPC, before Take)</span></div>
-                  <SpeechEditor value={stage.lines?.ready} onChange={(v) => setStageLines('ready', v)} placeholder="다 됐네! 받게." inQuest quests={quests} />
-                </Section>
-              )}
 
               <Section title="Supplies and rewards">
                 <div style={{ marginBottom: 3 }}>

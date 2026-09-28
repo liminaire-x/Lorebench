@@ -56,11 +56,13 @@ export function FolderSelect({ folders, value, onChange, exclude = new Set() }) 
 }
 
 // Folders first, then items, each sorted by name. `items` are { id, label, folder, note? };
-// `selected` is { kind: 'folder' | 'item', id }. A folder holding the selection stays open.
-export function FolderTree({ folders, items, selected, onSelect, collapsed, setCollapsed }) {
+// `selected` is { kind: 'folder' | 'item', id }, or something inside an item ({ kind, id, item },
+// e.g. a quest's stage). A folder holding the selection stays open. `itemChildren(item, depth)`
+// draws what sits under an item (a quest's stages), `itemProps(item)` adds handlers to its row.
+export function FolderTree({ folders, items, selected, onSelect, collapsed, setCollapsed, itemChildren, itemProps }) {
   const byId = Object.fromEntries(folders.map((f) => [f.id, f]))
   const selectedIn = selected?.kind === 'folder' ? byId[selected.id]?.parent
-    : items.find((i) => i.id === selected?.id)?.folder
+    : items.find((i) => i.id === (selected?.item ?? selected?.id))?.folder
   const holdsSelection = new Set()
   for (let f = byId[selectedIn]; f && !holdsSelection.has(f.id); f = byId[f.parent]) holdsSelection.add(f.id)
 
@@ -92,17 +94,23 @@ export function FolderTree({ folders, items, selected, onSelect, collapsed, setC
           </div>
         )
       })}
-      {items.filter((i) => (i.folder || '') === parent).sort((a, b) => byText(a.label, b.label)).map((i) => (
-        <button
-          key={i.id}
-          onClick={() => onSelect({ kind: 'item', id: i.id })}
-          style={row(depth, selected?.kind === 'item' && selected.id === i.id)}
-        >
-          <span style={{ width: 12 }} />
-          <span style={{ flex: 1 }}>{i.label}</span>
-          {i.note && <span style={hint}>{i.note}</span>}
-        </button>
-      ))}
+      {items.filter((i) => (i.folder || '') === parent).sort((a, b) => byText(a.label, b.label)).map((i) => {
+        const { style, ...handlers } = itemProps ? itemProps(i) : {}
+        return (
+          <div key={i.id}>
+            <button
+              onClick={() => onSelect({ kind: 'item', id: i.id })}
+              {...handlers}
+              style={{ ...row(depth, selected?.kind === 'item' && selected.id === i.id), ...style }}
+            >
+              <span style={{ width: 12 }} />
+              <span style={{ flex: 1 }}>{i.label}</span>
+              {i.note && <span style={hint}>{i.note}</span>}
+            </button>
+            {itemChildren && itemChildren(i, depth + 1)}
+          </div>
+        )
+      })}
     </>
   )
   return level('', 0)
