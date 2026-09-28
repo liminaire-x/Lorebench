@@ -49,7 +49,8 @@ import java.util.function.Function;
  *   <li>{@code GET /api/npcs} — the current NPC document</li>
  *   <li>{@code GET /api/npc-placements} — where each NPC stands</li>
  *   <li>{@code GET /api/quests} — the current quest document</li>
- *   <li>{@code POST /api/publish} — replace all documents: {@code {"graphs": ..., "npcs": ..., "quests": ...}}</li>
+ *   <li>{@code POST /api/publish} — replace all documents: {@code {"graphs": ..., "npcs": ..., "quests": ...}}, and
+ *       {@code "moves": {"<removed stage id>": "<stage id>"}} for players on stages it removes (0015)</li>
  *   <li>{@code GET /api/players} — who is online</li>
  *   <li>{@code GET /api/held-item?player=Name} — what they hold, as {@code /give} writes it</li>
  *   <li>{@code GET /api/crops} — the crops a harvest goal may name</li>

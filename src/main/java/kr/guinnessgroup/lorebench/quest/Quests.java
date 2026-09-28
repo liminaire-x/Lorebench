@@ -10,6 +10,8 @@ import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.logging.LogUtils;
+import kr.guinnessgroup.lorebench.DocumentException;
+import kr.guinnessgroup.lorebench.Ids;
 import kr.guinnessgroup.lorebench.record.Owner;
 import kr.guinnessgroup.lorebench.record.RecordStore;
 import kr.guinnessgroup.lorebench.runtime.LorebenchRuntime;
@@ -48,6 +50,7 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -490,6 +493,61 @@ public final class Quests {
         ServerPlayer online = server.getPlayerList().getPlayer(uuid);
         if (online != null) {
             sync(online);
+        }
+    }
+
+    /**
+     * A publish replaces {@code before} with {@code after} (0015): players on a stage it removes go
+     * to the stage the author chose, from its start (no progress, no wait; what they handed in stays
+     * handed in), online or not, and those on a first stage that no longer is first are pinned to it.
+     * Quests it removes keep their records (0005). Server thread.
+     *
+     * @param moves a removed stage's id → the id of the stage of the same quest its players go to
+     * @throws DocumentException if players are on a removed stage the author chose nowhere for;
+     *                           then nothing changes
+     */
+    public void moveStages(QuestDoc before, QuestDoc after, Map<String, String> moves) {
+        record Write(Owner owner, String questId, QuestStages.Move move) {}
+        List<Write> writes = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+        for (QuestDoc.Quest old : before.quests()) {
+            QuestDoc.Quest now = after.find(old.id());
+            if (now == null) {
+                continue;
+            }
+            Map<String, Integer> unchosen = new LinkedHashMap<>();
+            for (Owner owner : records.ownersWith(Owner.Kind.PLAYER, old.id())) {
+                QuestState s = QuestState.fromRecord(records.peek(owner, old.id()));
+                if (s != QuestState.ACTIVE && s != QuestState.WAITING) {
+                    continue;
+                }
+                String stored = records.peek(owner, QuestStages.key(old.id()));
+                QuestStages.Move move = QuestStages.whereTo(old, now, stored, moves);
+                switch (move.kind()) {
+                    case STAY -> { }
+                    case UNCHOSEN -> unchosen.merge(move.stage(), 1, Integer::sum);
+                    default -> writes.add(new Write(owner, old.id(), move));
+                }
+            }
+            unchosen.forEach((stage, n) -> errors.add(Ids.named("quest", old.id(), old.title()) + ": " + n
+                    + (n == 1 ? " player is" : " players are") + " on the removed stage '" + old.stage(stage).text()
+                    + "' (" + stage + "); choose which stage they go to"));
+        }
+        if (!errors.isEmpty()) {
+            throw new DocumentException(errors);
+        }
+        int moved = 0;
+        for (Write w : writes) {
+            records.setAny(w.owner(), QuestStages.key(w.questId()), w.move().stage());
+            if (w.move().kind() == QuestStages.Move.Kind.MOVE) {
+                records.setAny(w.owner(), w.questId(), QuestState.ACTIVE_VALUE);
+                records.setAny(w.owner(), QuestProgress.key(w.questId()), null);
+                records.setAny(w.owner(), QuestWaits.key(w.questId()), null);
+                moved++;
+            }
+        }
+        if (moved > 0) {
+            LOGGER.info("[Lorebench] Moved {} player(s) off removed quest stages", moved);
         }
     }
 

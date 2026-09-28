@@ -52,6 +52,7 @@ public final class LorebenchRuntime {
     private final ContentChecks checks;
     private volatile Owner serverOwner = Owner.server("main");
     private volatile Runnable onPublish = () -> {};
+    private volatile StageMoves stageMoves = StageMoves.NONE;
 
     /** Everything that changes on publish, swapped in one step. */
     private record Active(GraphDoc graphs, NpcDoc npcs, QuestDoc quests, Map<String, List<Start>> startsByTrigger) {}
@@ -78,9 +79,15 @@ public final class LorebenchRuntime {
         this.onPublish = (action == null) ? () -> {} : action;
     }
 
+    /** Called on every publish that passed its checks, before it goes live, on the publishing (web) thread. */
+    public void onStageMoves(StageMoves moves) {
+        this.stageMoves = (moves == null) ? StageMoves.NONE : moves;
+    }
+
     /**
      * Check, swap in, and save new content. The body is
-     * {@code {"graphs": <graph document>, "npcs": <NPC document>, "quests": <quest document>}}.
+     * {@code {"graphs": <graph document>, "npcs": <NPC document>, "quests": <quest document>}}, and
+     * {@code "moves": {"<removed stage id>": "<stage id>"}} when players are on stages it removes (0015).
      * Throws {@link DocumentException} if anything is rejected; then nothing changes.
      */
     public synchronized void publish(String json) {
@@ -99,7 +106,7 @@ public final class LorebenchRuntime {
         NpcDoc npcDoc = NpcFormat.read(npcs.toString());
         QuestDoc questDoc = QuestFormat.read(quests.toString());
         GraphDoc graphDoc = GraphFormat.read(graphs.toString());
-        activate(graphDoc, npcDoc, questDoc);
+        activate(graphDoc, npcDoc, questDoc, moves(body.get("moves")));
         write(npcsFile, NpcFormat.write(npcDoc));
         write(questsFile, QuestFormat.write(questDoc));
         write(graphsFile, GraphFormat.write(graphDoc));
@@ -119,7 +126,7 @@ public final class LorebenchRuntime {
             GraphDoc graphDoc = Files.exists(graphsFile)
                     ? GraphFormat.read(Files.readString(graphsFile, StandardCharsets.UTF_8))
                     : GraphDoc.EMPTY;
-            activate(graphDoc, npcDoc, questDoc);
+            activate(graphDoc, npcDoc, questDoc, null);
         } catch (DocumentException e) {
             LOGGER.error("[Lorebench] Saved content was not loaded; nothing will run until it is fixed or republished: {}",
                     e.errors());
@@ -128,7 +135,32 @@ public final class LorebenchRuntime {
         }
     }
 
-    private void activate(GraphDoc graphDoc, NpcDoc npcDoc, QuestDoc questDoc) {
+    /**
+     * The publish's {@code moves}: a removed stage's id → the stage its players go to (0015), none
+     * when it has none.
+     */
+    private static Map<String, String> moves(JsonElement e) {
+        if (e == null) {
+            return Map.of();
+        }
+        DocumentException shape = new DocumentException(
+                List.of("'moves' must be like { \"<removed stage id>\": \"<stage id>\" }"));
+        if (!e.isJsonObject()) {
+            throw shape;
+        }
+        Map<String, String> out = new HashMap<>();
+        for (Map.Entry<String, JsonElement> m : e.getAsJsonObject().entrySet()) {
+            JsonElement to = m.getValue();
+            if (!to.isJsonPrimitive() || !to.getAsJsonPrimitive().isString()) {
+                throw shape;
+            }
+            out.put(m.getKey(), to.getAsString());
+        }
+        return Map.copyOf(out);
+    }
+
+    /** @param moves a publish's stage moves ({@link StageMoves}), or {@code null} when loading saved content */
+    private void activate(GraphDoc graphDoc, NpcDoc npcDoc, QuestDoc questDoc, Map<String, String> moves) {
         checkItems(questDoc);
         Set<String> npcIds = npcDoc.npcs().stream().map(NpcDoc.NpcDef::id).collect(Collectors.toUnmodifiableSet());
         List<String> npcErrors = questDoc.npcErrors(npcIds);
@@ -150,6 +182,9 @@ public final class LorebenchRuntime {
             }
         }
         starts.replaceAll((k, v) -> List.copyOf(v));
+        if (moves != null) {
+            stageMoves.apply(active.quests(), questDoc, moves); // may reject; then nothing changes
+        }
         this.active = new Active(graphDoc, npcDoc, questDoc, Map.copyOf(starts));
         LOGGER.info("[Lorebench] {} graph(s), {} NPC(s), {} quest(s) active",
                 graphs.size(), npcDoc.npcs().size(), questDoc.quests().size());

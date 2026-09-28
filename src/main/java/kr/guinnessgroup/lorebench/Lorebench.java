@@ -50,6 +50,9 @@ import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /** Mod entry point: wires the pieces together and connects them to game events. */
 @Mod(Lorebench.MODID)
@@ -90,13 +93,34 @@ public final class Lorebench {
         // Publish arrives on the web thread; quest content goes out on the server thread.
         MinecraftServer mc = event.getServer();
         runtime.onPublish(() -> mc.execute(() -> quests.syncAll(mc)));
+        // Players on removed stages move with the records, which the server thread uses (0015).
+        runtime.onStageMoves((before, after, moves) ->
+                onServerThread(mc, () -> quests.moveStages(before, after, moves)));
         web.start();
+    }
+
+    /** Runs {@code task} on the server thread and waits for it; a rejection comes back as itself. */
+    private static void onServerThread(MinecraftServer mc, Runnable task) {
+        try {
+            mc.submit(task).get(5, TimeUnit.SECONDS);
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof DocumentException rejected) {
+                throw rejected;
+            }
+            throw new IllegalStateException("moving players between stages failed", e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted; nothing was published", e);
+        } catch (TimeoutException e) {
+            throw new IllegalStateException("the game did not answer in time; nothing was published", e);
+        }
     }
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         web.stop();
         runtime.onPublish(null);
+        runtime.onStageMoves(null);
         dialogues.stop();
         quests.stop();
         npcs.stop();

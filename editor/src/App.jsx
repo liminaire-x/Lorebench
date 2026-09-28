@@ -12,6 +12,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { newId } from './ids.js'
 import QuestTab from './QuestTab.jsx'
+import { MovesDialog, playersOn, removedStages } from './Stages.jsx'
 import NpcTab from './NpcTab.jsx'
 import { isCases, lineText } from './Section.jsx'
 import { FolderPanel, FolderSelect, FolderTree, addFolder, placeIn } from './FolderTree.jsx'
@@ -190,6 +191,9 @@ export default function App() {
   const [status, setStatus] = useState('connecting...')
   const [message, setMessage] = useState(null) // { ok, text }
   const [publishing, setPublishing] = useState(false)
+  // The quests as last published: a stage gone from them since may have players to move (0015).
+  const [publishedQuests, setPublishedQuests] = useState([])
+  const [moveAsks, setMoveAsks] = useState(null) // removed stages with players, while asking where they go
 
   const byType = useMemo(() => Object.fromEntries(schema.map((d) => [d.type, d])), [schema])
   const current = graphs.find((g) => g.id === currentId) || null
@@ -222,6 +226,7 @@ export default function App() {
         setNpcFolders(npcDoc.folders || [])
         setNpcs(npcDoc.npcs || [])
         setQuests(questDoc.quests || [])
+        setPublishedQuests(questDoc.quests || [])
         setQuestFolders(questDoc.folders || [])
         setStatus('ok')
         loadPlacements()
@@ -328,30 +333,45 @@ export default function App() {
     setSelectedNodeId(null)
   }, [current, graphs])
 
-  const publish = useCallback(async () => {
+  // `moves`: a removed stage's id → the stage its players go to (0015).
+  const publish = useCallback(async (moves = {}) => {
     setPublishing(true)
     setMessage(null)
     try {
+      const sent = quests.map(tidyQuest)
       const res = await fetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           graphs: toDoc(graphs, graphFolders),
           npcs: { format: NPC_FORMAT, folders: npcFolders, npcs: npcs.map(tidyNpc) },
-          quests: { format: QUEST_FORMAT, folders: questFolders, quests: quests.map(tidyQuest) },
+          quests: { format: QUEST_FORMAT, folders: questFolders, quests: sent },
+          ...(Object.keys(moves).length ? { moves } : {}),
         }),
       })
       const data = await res.json()
       setMessage(data.accepted
         ? { ok: true, text: 'Published.' }
         : { ok: false, text: (data.errors || ['unknown error']).join('\n') })
-      if (data.accepted) loadPlacements()
+      if (data.accepted) {
+        setPublishedQuests(sent)
+        loadPlacements()
+      }
     } catch (e) {
       setMessage({ ok: false, text: 'Publish error: ' + e })
     } finally {
       setPublishing(false)
     }
   }, [graphs, npcs, quests, graphFolders, npcFolders, questFolders, loadPlacements])
+
+  // Publish, asking first where the players on removed stages go (0015).
+  const startPublish = useCallback(async () => {
+    const removed = removedStages(publishedQuests, quests)
+    const counts = await Promise.all(removed.map((r) => playersOn(r.quest.id, r.stage.id)))
+    const asks = removed.map((r, i) => ({ ...r, count: counts[i] })).filter((a) => a.count !== 0)
+    if (asks.length) setMoveAsks(asks)
+    else publish()
+  }, [publishedQuests, quests, publish])
 
   const palette = useMemo(() => {
     const g = {}
@@ -392,7 +412,7 @@ export default function App() {
           </nav>
           <span style={{ fontSize: 13, color: status === 'ok' ? '#2a7d4f' : '#c0392b' }}>server: {status}</span>
           <span style={{ flex: 1 }} />
-          <button onClick={publish} disabled={publishing || status !== 'ok'} style={{ padding: '6px 14px', cursor: 'pointer' }}>
+          <button onClick={startPublish} disabled={publishing || status !== 'ok'} style={{ padding: '6px 14px', cursor: 'pointer' }}>
             {publishing ? 'Publishing...' : 'Publish'}
           </button>
         </header>
@@ -406,6 +426,12 @@ export default function App() {
           </div>
         )}
 
+        {moveAsks && (
+          <MovesDialog
+            asks={moveAsks} quests={quests} onCancel={() => setMoveAsks(null)}
+            onPublish={(moves) => { setMoveAsks(null); publish(moves) }}
+          />
+        )}
         <QuestTab
           quests={quests} setQuests={setQuests} folders={questFolders} setFolders={setQuestFolders} npcs={npcs}
           status={status} setMessage={setMessage} hidden={tab !== 'quests'}

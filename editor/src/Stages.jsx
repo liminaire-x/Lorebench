@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { newId } from './ids.js'
 
 // A quest's stages in the quest tree (0015): under the open quest, in the author's order,
@@ -97,6 +97,61 @@ export function StageRows({ quest, depth, selected, onSelect, drag, setDrag, dro
         </div>
       ))}
       <div style={line(at(stages.length))} />
+    </div>
+  )
+}
+
+// Stages removed from quests as last published (deleted, or dragged into another quest), which
+// players may be on: [{ quest, stage }], both as published. A quest removed whole keeps its
+// players' records (0005), so its stages are not asked about.
+export function removedStages(published, quests) {
+  const now = Object.fromEntries(quests.map((q) => [q.id, q]))
+  return published.flatMap((pq) => {
+    const q = now[pq.id]
+    if (!q) return []
+    const kept = new Set((q.stages || []).map((st) => st.id))
+    return (pq.stages || []).filter((st) => !kept.has(st.id)).map((st) => ({ quest: pq, stage: st }))
+  })
+}
+
+// Before publishing: where the players on each removed stage go, a stage of the same quest
+// (0015). `asks` are removed stages with `count` players on them (null: the game couldn't be
+// asked). Publishing waits until every one has a place; the server checks again.
+export function MovesDialog({ asks, quests, onPublish, onCancel }) {
+  const [moves, setMoves] = useState({})
+  const ready = asks.every((a) => moves[a.stage.id])
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 30, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 8, padding: '16px 20px', width: 480, maxWidth: '90vw', fontSize: 13 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Players on removed stages</div>
+        <div style={{ ...hint, marginBottom: 12 }}>
+          Choose which stage of the same quest they go to. They start it from its beginning (its counts from 0, no wait);
+          what they already handed in doesn't come back.
+        </div>
+        {asks.map((a) => {
+          const stages = quests.find((q) => q.id === a.quest.id)?.stages || []
+          return (
+            <div key={a.stage.id} style={{ marginBottom: 10 }}>
+              <div style={{ marginBottom: 3 }}>
+                <b>{a.quest.title}</b> · '{a.stage.text || '(no text)'}' ·{' '}
+                {a.count === null ? 'players may be on it' : `${a.count} player${a.count === 1 ? '' : 's'} on it`}
+              </div>
+              <select
+                value={moves[a.stage.id] || ''}
+                onChange={(e) => setMoves((m) => ({ ...m, [a.stage.id]: e.target.value }))}
+                style={{ width: '100%', padding: '4px 6px' }}
+              >
+                <option value="">Choose where they go…</option>
+                {stages.map((st, i) => <option key={st.id} value={st.id}>{i + 1}. {st.text || '(no text)'}</option>)}
+              </select>
+            </div>
+          )
+        })}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+          <button onClick={onCancel} style={{ padding: '5px 12px', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={() => onPublish(moves)} disabled={!ready} style={{ padding: '5px 12px', cursor: ready ? 'pointer' : 'default' }}>Publish</button>
+        </div>
+      </div>
     </div>
   )
 }
