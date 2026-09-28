@@ -279,6 +279,11 @@ class QuestFormatTest {
         DocumentException e = assertThrows(DocumentException.class, () -> one("",
                 "\"lines\": { \"waiting\": [ { \"when\": { \"questState\": { \"quest_gone\": \"done\" } }, \"lines\": [ \"음?\" ] } ] }"));
         assertEquals(List.of("quest 'A' (quest_a) stage 1 '할 일' waiting: quest 'quest_gone' does not exist"), e.errors());
+        // And stages that quest has.
+        one("", "\"lines\": { \"waiting\": [ { \"when\": { \"stage\": { \"quest_a\": \"stage_a\" } }, \"lines\": [ \"음?\" ] } ] }");
+        e =assertThrows(DocumentException.class, () -> one("",
+                "\"lines\": { \"waiting\": [ { \"when\": { \"stage\": { \"quest_a\": \"stage_gone\" } }, \"lines\": [ \"음?\" ] } ] }"));
+        assertEquals(List.of("quest 'A' (quest_a) stage 1 '할 일' waiting: quest 'quest_a' has no stage 'stage_gone'"), e.errors());
     }
 
     @Test

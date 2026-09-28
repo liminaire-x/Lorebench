@@ -10,8 +10,9 @@ import kr.guinnessgroup.lorebench.Ids;
 import kr.guinnessgroup.lorebench.Speech;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 /**
  * The saved NPC document ({@code npcs.json}): every NPC definition, authored in
@@ -78,14 +79,16 @@ public record NpcDoc(List<Folder> folders, List<NpcDef> npcs) {
         }
     }
 
-    /** A problem for each quest a greeting's condition names that is not one of {@code questIds}. */
-    public List<String> questErrors(Set<String> questIds) {
+    /**
+     * A problem for each quest a greeting's condition names that does not exist, or stage its quest does not have.
+     *
+     * @param stages every quest's id → its stage ids
+     */
+    public List<String> questErrors(Map<String, ? extends Collection<String>> stages) {
         List<String> errors = new ArrayList<>();
         for (NpcDef n : npcs) {
-            for (String quest : n.greeting().questsNamed()) {
-                if (!questIds.contains(quest)) {
-                    errors.add(Ids.named("NPC", n.id(), n.name()) + " greeting: quest '" + quest + "' does not exist");
-                }
+            for (String problem : n.greeting().namingErrors(stages)) {
+                errors.add(Ids.named("NPC", n.id(), n.name()) + " greeting: " + problem);
             }
         }
         return errors;

@@ -195,6 +195,12 @@ function When({ when, onChange, inQuest, quests }) {
     if (!entries.length) return drop('questState')
     onChange({ ...when, questState: Object.fromEntries(entries) })
   }
+  // The stage the player is on, whatever the quest's state (0012 "단계 조건").
+  const stages = Object.entries(when.stage || {})
+  const setStages = (entries) => {
+    if (!entries.length) return drop('stage')
+    onChange({ ...when, stage: Object.fromEntries(entries) })
+  }
   const byTitle = [...quests].sort((a, b) => (a.title || '').localeCompare(b.title || ''))
   return (
     <div style={{ fontSize: 12, marginBottom: 4 }}>
@@ -222,16 +228,43 @@ function When({ when, onChange, inQuest, quests }) {
           <button onClick={() => setStates(states.filter((_, j) => j !== i))} style={small}>×</button>
         </div>
       ))}
+      {stages.map(([quest, stage], i) => {
+        const list = quests.find((q) => q.id === quest)?.stages || []
+        const gone = quest && stage && !list.some((s) => s.id === stage)
+        return (
+          <div key={i} style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 3 }}>
+            Quest
+            <select value={quest} onChange={(e) => setStages(stages.map((s, j) => (j === i ? [e.target.value, ''] : s)))}>
+              <option value="">(choose)</option>
+              {byTitle.map((q) => <option key={q.id} value={q.id}>{q.title || q.id}</option>)}
+            </select>
+            is on stage
+            <select
+              value={stage} style={gone ? { color: '#dc2626' } : undefined}
+              title={gone ? 'This quest has no such stage now: choose another, or publish is refused' : undefined}
+              onChange={(e) => setStages(stages.map((s, j) => (j === i ? [s[0], e.target.value] : s)))}
+            >
+              <option value="">(choose)</option>
+              {gone && <option value={stage}>(removed stage)</option>}
+              {list.map((s, n) => <option key={s.id} value={s.id}>{n + 1}. {s.text || s.id}</option>)}
+            </select>
+            <span style={{ color: '#888' }}>(in progress, ready or waiting)</span>
+            <button onClick={() => setStages(stages.filter((_, j) => j !== i))} style={small}>×</button>
+          </div>
+        )
+      })}
       <select
         value="" style={{ fontSize: 11 }}
         onChange={(e) => {
           if (e.target.value === 'times') onChange({ ...when, timesDeclined: { min: 1 } })
           if (e.target.value === 'quest' && !states.some(([q]) => q === '')) setStates([...states, ['', 'done']])
+          if (e.target.value === 'stage' && !stages.some(([q]) => q === '')) setStages([...stages, ['', '']])
         }}
       >
         <option value="">+ and…</option>
         {inQuest && times === undefined && <option value="times">times declined</option>}
         <option value="quest">quest state</option>
+        <option value="stage">quest stage</option>
       </select>
     </div>
   )

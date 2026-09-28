@@ -33,6 +33,11 @@ class SpeechTest {
 
     /** A player who turned the quest down {@code times} times and is in these states. */
     static Speech.Facts player(int times, Map<String, QuestState> states) {
+        return player(times, states, Map.of());
+    }
+
+    /** ... and on these stages (quest id → stage id) of the quests they are on. */
+    static Speech.Facts player(int times, Map<String, QuestState> states, Map<String, String> stages) {
         return new Speech.Facts() {
             @Override
             public int timesDeclined() {
@@ -42,6 +47,11 @@ class SpeechTest {
             @Override
             public QuestState questState(String questId) {
                 return states.getOrDefault(questId, QuestState.HIDDEN);
+            }
+
+            @Override
+            public String stage(String questId) {
+                return stages.get(questId);
             }
         };
     }
@@ -101,6 +111,48 @@ class SpeechTest {
     }
 
     @Test
+    void aStageHoldsWhateverTheStateAndCanBeNarrowedByIt() {
+        List<String> errors = new ArrayList<>();
+        Speech greeting = read("""
+                [ { "when": { "stage": { "quest_necklace": "stage_smith" }, "questState": { "quest_necklace": "waiting" } },
+                    "lines": [ "대장장이 솜씨라면 믿을 만하지." ] },
+                  { "when": { "stage": { "quest_necklace": "stage_smith" } }, "lines": [ "대장장이에게는 가 봤나?" ] },
+                  { "when": { "stage": { "quest_necklace": "stage_daughter" } }, "lines": [ "어서 딸에게 전해 주게." ] },
+                  { "lines": [ "요즘 늑대가 부쩍 늘었어." ] } ]
+                """, false, errors);
+        assertEquals(List.of(), errors);
+        Map<String, String> atSmith = Map.of("quest_necklace", "stage_smith");
+        // Holding the shards makes the quest ready, and the stage still holds.
+        assertEquals("대장장이에게는 가 봤나?", said(greeting, player(0, Map.of("quest_necklace", QuestState.READY), atSmith)));
+        assertEquals("대장장이에게는 가 봤나?", said(greeting, player(0, Map.of("quest_necklace", QuestState.ACTIVE), atSmith)));
+        assertEquals("대장장이 솜씨라면 믿을 만하지.",
+                said(greeting, player(0, Map.of("quest_necklace", QuestState.WAITING), atSmith)));
+        assertEquals("어서 딸에게 전해 주게.", said(greeting,
+                player(0, Map.of("quest_necklace", QuestState.READY), Map.of("quest_necklace", "stage_daughter"))));
+        assertEquals("요즘 늑대가 부쩍 늘었어.", said(greeting, player(0, Map.of())));
+        assertEquals(Set.of("quest_necklace"), greeting.questsNamed());
+        assertEquals(Map.of("quest_necklace", Set.of("stage_smith", "stage_daughter")), greeting.stagesNamed());
+        assertEquals(greeting, read(Speech.write(greeting).toString(), false, errors));
+        assertTrue(Speech.write(greeting).toString().contains("\"stage\":{\"quest_necklace\":\"stage_smith\"}"));
+    }
+
+    @Test
+    void namedQuestsAndStagesMustExist() {
+        List<String> errors = new ArrayList<>();
+        Speech greeting = read("""
+                [ { "when": { "questState": { "quest_sword": "done" } }, "lines": [ "칼은 잘 쓰고 있나?" ] },
+                  { "when": { "stage": { "quest_necklace": "stage_smith" } }, "lines": [ "대장장이에게는 가 봤나?" ] } ]
+                """, false, errors);
+        assertEquals(List.of(), errors);
+        assertEquals(List.of(), greeting.namingErrors(Map.of("quest_sword", List.of("stage_a"),
+                "quest_necklace", List.of("stage_shards", "stage_smith"))));
+        assertEquals(List.of("quest 'quest_necklace' has no stage 'stage_smith'"),
+                greeting.namingErrors(Map.of("quest_sword", List.of("stage_a"), "quest_necklace", List.of("stage_shards"))));
+        assertEquals(List.of("quest 'quest_sword' does not exist", "quest 'quest_necklace' does not exist"),
+                greeting.namingErrors(Map.of()));
+    }
+
+    @Test
     void plainLinesStayPlain() {
         List<String> errors = new ArrayList<>();
         Speech plain = read("[ \"고맙네!\", { \"text\": \"잘 가게.\", \"animation\": \"animation.chief.wave\" } ]", true, errors);
@@ -135,6 +187,11 @@ class SpeechTest {
                 "[ { \"when\": { \"questState\": {} }, \"lines\": [ \"hi\" ] } ]",                // no quest
                 "[ { \"when\": { \"questState\": { \"wolf\": \"done\" } }, \"lines\": [ \"hi\" ] } ]",        // not a quest id
                 "[ { \"when\": { \"questState\": { \"quest_a\": \"finished\" } }, \"lines\": [ \"hi\" ] } ]", // not a state
+                "[ { \"when\": { \"stage\": {} }, \"lines\": [ \"hi\" ] } ]",                     // no quest
+                "[ { \"when\": { \"stage\": \"stage_a\" }, \"lines\": [ \"hi\" ] } ]",                  // no quest
+                "[ { \"when\": { \"stage\": { \"wolf\": \"stage_a\" } }, \"lines\": [ \"hi\" ] } ]",      // not a quest id
+                "[ { \"when\": { \"stage\": { \"quest_a\": \"done\" } }, \"lines\": [ \"hi\" ] } ]",      // not a stage id
+                "[ { \"when\": { \"stage\": { \"quest_a\": 2 } }, \"lines\": [ \"hi\" ] } ]",             // not a stage id
                 "[ { \"when\": { \"questState\": { \"quest_a\": \"done\" } }, \"lines\": [ \" \" ] } ]"}) {    // empty line
             List<String> errors = new ArrayList<>();
             read(bad, true, errors);

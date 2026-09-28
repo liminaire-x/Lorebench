@@ -155,7 +155,7 @@ export default function NpcTab({ npcs, setNpcs, folders, setFolders, placements,
 
               <Section title="Dialogue">
                 <div style={{ marginBottom: 3 }}>
-                  Greeting <span style={hint}>(when the player has nothing to do with this NPC; one page per line; + case to greet by quest state)</span>
+                  Greeting <span style={hint}>(when the player has nothing to do with this NPC; one page per line; + case to greet by quest state or stage)</span>
                 </div>
                 <SpeechEditor value={npc.greeting} onChange={setGreeting} placeholder="오, 자네 왔군." quests={quests} />
               </Section>

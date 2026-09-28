@@ -168,7 +168,9 @@ public final class LorebenchRuntime {
             throw new DocumentException(npcErrors);
         }
         Set<String> questIds = questDoc.quests().stream().map(QuestDoc.Quest::id).collect(Collectors.toUnmodifiableSet());
-        List<String> questErrors = npcDoc.questErrors(questIds);
+        Map<String, List<String>> stages = questDoc.quests().stream().collect(Collectors.toUnmodifiableMap(
+                QuestDoc.Quest::id, q -> q.stages().stream().map(QuestDoc.Stage::id).toList()));
+        List<String> questErrors = npcDoc.questErrors(stages);
         if (!questErrors.isEmpty()) {
             throw new DocumentException(questErrors);
         }

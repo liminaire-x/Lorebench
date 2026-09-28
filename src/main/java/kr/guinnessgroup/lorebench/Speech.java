@@ -13,6 +13,7 @@ import kr.guinnessgroup.lorebench.DialogueLines.Line;
 import kr.guinnessgroup.lorebench.quest.QuestState;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -27,11 +28,12 @@ import java.util.Set;
  * always holds.
  * <pre>[ { "when": { "timesDeclined": { "min": 5 } }, "lines": [ "…자네, 일부러 그러는 거지?" ] },
  *   { "when": { "questState": { "quest_necklace": "done" } }, "lines": [ "목걸이 덕에 딸이 다시 웃는다네." ] },
+ *   { "when": { "stage": { "quest_necklace": "stage_e5f6g7h8" } }, "lines": [ "대장장이에게는 가 봤나?" ] },
  *   { "lines": [ "오, 자네 왔군." ] } ]</pre>
  * Plain lines are one group without {@code when} and are written as before. Numbers are
  * written as Minecraft writes ranges: {@code 5} (exactly), {@code { "min": 1 }}, {@code { "max": 2 }}.
  * The server picks the lines, so conditions never reach the client.
- * See docs/decisions/0012-lost-necklace.md.
+ * See docs/decisions/0012-lost-necklace.md ({@code stage}: "단계 조건").
  */
 public record Speech(List<Group> groups) {
 
@@ -40,6 +42,7 @@ public record Speech(List<Group> groups) {
     /** Condition names. Never rename: they are saved. */
     public static final String TIMES_DECLINED = "timesDeclined";
     public static final String QUEST_STATE = "questState";
+    public static final String STAGE = "stage";
 
     private static final Set<String> GROUP_KEYS = Set.of("when", "lines");
     private static final Set<String> RANGE_KEYS = Set.of("min", "max");
@@ -52,13 +55,14 @@ public record Speech(List<Group> groups) {
      *
      * @param timesDeclined how many times the player turned the quest down, or null for any
      * @param questState    quest id → the state it must be in for the player, in written order
+     * @param stage         quest id → the stage the player must be on, in written order
      */
-    public record When(Range timesDeclined, Map<String, QuestState> questState) {
+    public record When(Range timesDeclined, Map<String, QuestState> questState, Map<String, String> stage) {
 
-        public static final When ALWAYS = new When(null, Map.of());
+        public static final When ALWAYS = new When(null, Map.of(), Map.of());
 
         public boolean always() {
-            return timesDeclined == null && questState.isEmpty();
+            return timesDeclined == null && questState.isEmpty() && stage.isEmpty();
         }
 
         public boolean holds(Facts facts) {
@@ -67,6 +71,11 @@ public record Speech(List<Group> groups) {
             }
             for (Map.Entry<String, QuestState> e : questState.entrySet()) {
                 if (facts.questState(e.getKey()) != e.getValue()) {
+                    return false;
+                }
+            }
+            for (Map.Entry<String, String> e : stage.entrySet()) {
+                if (!e.getValue().equals(facts.stage(e.getKey()))) {
                     return false;
                 }
             }
@@ -93,6 +102,9 @@ public record Speech(List<Group> groups) {
 
         /** Where they are with a quest (READY when an active quest's goals are met). */
         QuestState questState(String questId);
+
+        /** The id of the stage they are on, whatever its state; null when they are not on the quest (not taken, done). */
+        String stage(String questId);
     }
 
     /** Lines said always; none = {@link #NONE}. */
@@ -124,8 +136,41 @@ public record Speech(List<Group> groups) {
         Set<String> out = new LinkedHashSet<>();
         for (Group g : groups) {
             out.addAll(g.when().questState().keySet());
+            out.addAll(g.when().stage().keySet());
         }
         return out;
+    }
+
+    /** Quest id → every stage a condition names in it, to check the quest has them. */
+    public Map<String, Set<String>> stagesNamed() {
+        Map<String, Set<String>> out = new LinkedHashMap<>();
+        for (Group g : groups) {
+            g.when().stage().forEach((quest, stage) -> out.computeIfAbsent(quest, k -> new LinkedHashSet<>()).add(stage));
+        }
+        return out;
+    }
+
+    /**
+     * What is wrong with the quests and stages the conditions name.
+     *
+     * @param stages quest id → its stage ids (null when not known), for every quest there is
+     */
+    public List<String> namingErrors(Map<String, ? extends Collection<String>> stages) {
+        List<String> errors = new ArrayList<>();
+        for (String quest : questsNamed()) {
+            if (!stages.containsKey(quest)) {
+                errors.add("quest '" + quest + "' does not exist");
+            }
+        }
+        stagesNamed().forEach((quest, named) -> {
+            Collection<String> has = stages.get(quest);
+            for (String stage : named) {
+                if (has != null && !has.contains(stage)) {
+                    errors.add("quest '" + quest + "' has no stage '" + stage + "'");
+                }
+            }
+        });
+        return errors;
     }
 
     /**
@@ -183,13 +228,14 @@ public record Speech(List<Group> groups) {
     }
 
     private static When readWhen(JsonElement e, boolean inQuest, String where, List<String> errors) {
-        String known = inQuest ? TIMES_DECLINED + ", " + QUEST_STATE : QUEST_STATE;
+        String known = (inQuest ? TIMES_DECLINED + ", " : "") + QUEST_STATE + ", " + STAGE;
         if (e == null || !e.isJsonObject() || e.getAsJsonObject().size() == 0) {
             errors.add(where + ": 'when' must name at least one condition (" + known + "), or be left out to always say these");
             return When.ALWAYS;
         }
         Range times = null;
         Map<String, QuestState> states = new LinkedHashMap<>();
+        Map<String, String> stages = new LinkedHashMap<>();
         for (Map.Entry<String, JsonElement> c : e.getAsJsonObject().entrySet()) {
             switch (c.getKey()) {
                 case TIMES_DECLINED -> {
@@ -200,10 +246,11 @@ public record Speech(List<Group> groups) {
                     }
                 }
                 case QUEST_STATE -> readStates(c.getValue(), where, states, errors);
+                case STAGE -> readStages(c.getValue(), where, stages, errors);
                 default -> errors.add(where + ": unknown condition '" + c.getKey() + "' (use " + known + ")");
             }
         }
-        return new When(times, Collections.unmodifiableMap(states));
+        return new When(times, Collections.unmodifiableMap(states), Collections.unmodifiableMap(stages));
     }
 
     private static Range readRange(JsonElement e, String where, List<String> errors) {
@@ -259,6 +306,24 @@ public record Speech(List<Group> groups) {
         }
     }
 
+    private static void readStages(JsonElement e, String where, Map<String, String> into, List<String> errors) {
+        if (e == null || !e.isJsonObject() || e.getAsJsonObject().size() == 0) {
+            errors.add(where + ": " + STAGE + " must name a quest and its stage, like { \"quest_a\": \"stage_b\" }");
+            return;
+        }
+        for (Map.Entry<String, JsonElement> s : e.getAsJsonObject().entrySet()) {
+            JsonElement v = s.getValue();
+            String stage = v.isJsonPrimitive() && v.getAsJsonPrimitive().isString() ? v.getAsString() : null;
+            if (!Ids.valid(Ids.QUEST, s.getKey())) {
+                errors.add(where + ": " + STAGE + " quest '" + s.getKey() + "' " + Ids.rule(Ids.QUEST));
+            } else if (!Ids.valid(Ids.STAGE, stage)) {
+                errors.add(where + ": " + STAGE + " of '" + s.getKey() + "' " + Ids.rule(Ids.STAGE));
+            } else {
+                into.put(s.getKey(), stage);
+            }
+        }
+    }
+
     /** Plain lines when said always, as before; groups otherwise. */
     public static JsonArray write(Speech speech) {
         List<Group> groups = speech.groups();
@@ -298,6 +363,11 @@ public record Speech(List<Group> groups) {
             JsonObject states = new JsonObject();
             when.questState().forEach((quest, state) -> states.addProperty(quest, state.out));
             o.add(QUEST_STATE, states);
+        }
+        if (!when.stage().isEmpty()) {
+            JsonObject stages = new JsonObject();
+            when.stage().forEach(stages::addProperty);
+            o.add(STAGE, stages);
         }
         return o;
     }

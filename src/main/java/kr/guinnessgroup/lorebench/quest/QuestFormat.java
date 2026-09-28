@@ -280,6 +280,13 @@ public final class QuestFormat {
      * (it could never be offered). Quests the lines' conditions name must exist too.
      */
     private static void checkRequires(List<QuestDoc.Quest> quests, Set<String> ids, List<String> errors) {
+        Map<String, List<String>> stages = new HashMap<>(); // a quest that did not read has its stages unknown (null)
+        for (String id : ids) {
+            stages.put(id, null);
+        }
+        for (QuestDoc.Quest q : quests) {
+            stages.put(q.id(), q.stages().stream().map(QuestDoc.Stage::id).toList());
+        }
         Map<String, List<String>> requires = new HashMap<>();
         for (QuestDoc.Quest q : quests) {
             requires.put(q.id(), q.flow().requires());
@@ -291,11 +298,11 @@ public final class QuestFormat {
                     errors.add(where + " requires quest '" + r + "' that does not exist");
                 }
             }
-            namesQuestsThatExist(q.flow().lines().all(), LINE_KEYS, where, ids, errors);
+            namesQuestsThatExist(q.flow().lines().all(), LINE_KEYS, where, stages, errors);
             for (int n = 0; n < q.stages().size(); n++) {
                 QuestDoc.Stage s = q.stages().get(n);
                 namesQuestsThatExist(s.lines().all(), STAGE_LINE_KEYS, where + " stage " + (n + 1) + " '" + s.text() + "'",
-                        ids, errors);
+                        stages, errors);
             }
         }
         for (QuestDoc.Quest q : quests) {
@@ -305,13 +312,11 @@ public final class QuestFormat {
         }
     }
 
-    private static void namesQuestsThatExist(List<Speech> lines, List<String> keys, String where, Set<String> ids,
-                                             List<String> errors) {
+    private static void namesQuestsThatExist(List<Speech> lines, List<String> keys, String where,
+                                             Map<String, List<String>> stages, List<String> errors) {
         for (int i = 0; i < keys.size(); i++) {
-            for (String named : lines.get(i).questsNamed()) {
-                if (!ids.contains(named)) {
-                    errors.add(where + " " + keys.get(i) + ": quest '" + named + "' does not exist");
-                }
+            for (String problem : lines.get(i).namingErrors(stages)) {
+                errors.add(where + " " + keys.get(i) + ": " + problem);
             }
         }
     }

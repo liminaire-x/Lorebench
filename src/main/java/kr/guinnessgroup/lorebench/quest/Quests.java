@@ -142,6 +142,21 @@ public final class Quests {
         return QuestStages.of(quest, records.get(owner, QuestStages.key(quest.id())));
     }
 
+    /**
+     * The id of the stage the player is on, whatever its state (a line's {@code stage} condition, 0012), or
+     * {@code null} when they are not on the quest: not taken, done, or a removed quest or stage.
+     */
+    public String stageOn(ServerPlayer player, String questId) {
+        Owner owner = Owner.player(player.getUUID());
+        QuestState stored = QuestState.fromRecord(records.get(owner, questId));
+        QuestDoc.Quest quest = runtime.quest(questId);
+        if (quest == null || stored == QuestState.HIDDEN || stored == QuestState.DONE) {
+            return null;
+        }
+        QuestDoc.Stage stage = stage(owner, quest);
+        return stage == null ? null : stage.id();
+    }
+
     /** Whether the player has handed the quest's goals in and waits for, or can take, the rewards. */
     public boolean handedIn(ServerPlayer player, String questId) {
         return QuestState.fromRecord(records.get(Owner.player(player.getUUID()), questId)) == QuestState.WAITING;

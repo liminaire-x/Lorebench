@@ -86,6 +86,8 @@ function realSpeech(v) {
     if (typeof t === 'number' || (t && (t.min !== undefined || t.max !== undefined))) when.timesDeclined = t
     const states = Object.entries(c.when.questState || {}).filter(([quest]) => quest)
     if (states.length) when.questState = Object.fromEntries(states)
+    const stages = Object.entries(c.when.stage || {}).filter(([quest, stage]) => quest && stage)
+    if (stages.length) when.stage = Object.fromEntries(stages)
     return { when, lines }
   })
   if (cases.length && !cases[cases.length - 1].when && !cases[cases.length - 1].lines.length) cases.pop()

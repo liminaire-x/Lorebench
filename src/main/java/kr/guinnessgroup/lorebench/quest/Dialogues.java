@@ -158,6 +158,11 @@ public final class Dialogues {
             public QuestState questState(String id) {
                 return quests.state(player, id);
             }
+
+            @Override
+            public String stage(String id) {
+                return quests.stageOn(player, id);
+            }
         };
     }
 

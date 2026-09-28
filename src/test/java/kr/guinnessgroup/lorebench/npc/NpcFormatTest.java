@@ -10,7 +10,7 @@ import kr.guinnessgroup.lorebench.Speech;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -57,12 +57,16 @@ class NpcFormatTest {
         NpcDoc doc = NpcFormat.read("""
                 { "format": 1, "npcs": [ { "id": "npc_guard", "name": "경비대장", "greeting": [
                   { "when": { "questState": { "quest_necklace": "done" } }, "lines": [ "목걸이 덕에 딸이 다시 웃는다네." ] },
+                  { "when": { "stage": { "quest_necklace": "stage_smith" } }, "lines": [ "대장장이에게는 가 봤나?" ] },
                   { "lines": [ "오, 자네 왔군." ] } ] } ] }
                 """);
         assertEquals(doc, NpcFormat.read(NpcFormat.write(doc)));
-        assertEquals(List.of(), doc.questErrors(Set.of("quest_necklace")));
+        assertEquals(List.of(), doc.questErrors(Map.of("quest_necklace", List.of("stage_shards", "stage_smith"))));
         assertEquals(List.of("NPC '경비대장' (npc_guard) greeting: quest 'quest_necklace' does not exist"),
-                doc.questErrors(Set.of()));
+                doc.questErrors(Map.of()));
+        // A stage removed, or moved to another quest (a new id), must be taken out of the condition first.
+        assertEquals(List.of("NPC '경비대장' (npc_guard) greeting: quest 'quest_necklace' has no stage 'stage_smith'"),
+                doc.questErrors(Map.of("quest_necklace", List.of("stage_shards"))));
         // A greeting has no quest of its own to count refusals of.
         assertThrows(DocumentException.class, () -> NpcFormat.read(
                 "{\"format\":1,\"npcs\":[{\"id\":\"npc_a\",\"name\":\"A\",\"greeting\":"
