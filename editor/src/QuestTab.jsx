@@ -538,7 +538,6 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
                 <div style={{ margin: '10px 0 3px' }}>When it's ready <span style={hint}>(the stage's NPC, before Take)</span></div>
                 <SpeechEditor value={stage.lines?.ready} onChange={(v) => setStageLines('ready', v)} placeholder="다 됐네! 받게." inQuest quests={quests} />
               </Section>
-              <button onClick={() => deleteStage(quest, stage)} style={{ padding: '5px 10px', cursor: 'pointer', color: '#c0392b' }}>Delete stage</button>
             </>
           ) : quest ? (
             <>
