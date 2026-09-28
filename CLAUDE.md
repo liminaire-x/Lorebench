@@ -54,7 +54,7 @@
 - 응답/문서 언어: **한국어**. git commit 언어: **영어**. Lorebench(로어벤치)는 모음으로 끝난다 → "Lorebench**는/를/가/와**".
 - 저장소: 로컬 `C:\Users\gntod\MyProjects\Intellij\LoreBench`, 원격 `https://github.com/liminaire-x/Lorebench.git`. Gradle 프로젝트 이름은 `settings.gradle`에서 `lorebench`로 고정(폴더 이름과 무관).
 - **인수인계 문서 `docs/handoff.md`는 로컬 전용**: 커밋하지 않는다(`.gitignore`에 있음).
-- 프런트: React + React Flow(@xyflow/react), Vite 단일 index.html. `editor/` 소스 → Gradle buildEditor/packEditor로 패키징. 헤더 탭: `App.jsx`(그래프 탭·Publish·문서 상태), `QuestTab.jsx`(퀘스트 트리·편집), `NpcTab.jsx`(NPC 트리·섹션), `FolderTree.jsx`(세 탭이 함께 쓰는 폴더 트리·폴더 편집), `Section.jsx`(카드·대사 줄 목록·조건 묶음 편집 `SpeechEditor`). publish 직전 빈 줄·빈 조건 정리는 `App.jsx`의 `tidyNpc`·`tidyQuest`(`realSpeech`).
+- 프런트: React + React Flow(@xyflow/react), Vite 단일 index.html. `editor/` 소스 → Gradle buildEditor/packEditor로 패키징. 헤더 탭: `App.jsx`(그래프 탭·Publish·문서 상태), `QuestTab.jsx`(퀘스트 트리·편집), `Stages.jsx`(트리의 퀘스트 안 단계: 브라우저 내장 드래그 앤 드롭·우클릭 메뉴, 0015), `NpcTab.jsx`(NPC 트리·섹션), `FolderTree.jsx`(세 탭이 함께 쓰는 폴더 트리·폴더 편집), `Section.jsx`(카드·대사 줄 목록·조건 묶음 편집 `SpeechEditor`). publish 직전 빈 줄·빈 조건 정리는 `App.jsx`의 `tidyNpc`·`tidyQuest`(`realSpeech`).
 - 웹 서버: JDK `HttpServer` 8080 (`web/LorebenchWebServer.java`).
 - **에이전트 환경에서 Java 컴파일 금지**(NeoForge 빌드가 무겁고 Windows Gradle 캐시와 꼬임). 컴파일/실행 확인은 **GitHub Actions CI**(push 시 클린 리눅스 빌드) 또는 **사용자 IntelliJ**(`runServer` + `runClient1`/`runClient2`, 두 플레이어 Dev1·Dev2).
 
