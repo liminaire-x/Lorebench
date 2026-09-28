@@ -42,6 +42,10 @@
 - **처음부터 다시 시험하기**: 서버를 끄고 Gradle `lorebench > reset`. Lorebench 콘텐츠(그래프·NPC·퀘스트)와 기록(표식·NPC 배치·퀘스트 상태·진행)을 `run/config/lorebench/backups/<시각>/`으로 옮긴다. 월드와 인벤토리는 그대로.
   - 기록만 바뀌었을 때(키 규칙 등) 콘텐츠를 살리려면 reset 뒤 백업의 `npcs.json`·`quests.json`(·`graphs.json`)을 제자리로 복사한다. NPC 배치는 기록이라 다시 소환한다.
   - **한 사람의 한 퀘스트만** 다시 하려면 reset 대신 에디터 퀘스트 화면의 **Players → [Reset]**(받기 전으로, 서버를 끄지 않아도 됨).
+- **형식이 바뀔 때 콘텐츠 살리기**: 새 코드는 옛 모양의 파일을 읽지 못하고, 읽기에 실패하면 NPC·그래프까지 아무것도 돌지 않는다
+  (`LorebenchRuntime.load`). 그 상태의 에디터는 빈 문서를 보여 주고, publish하면 덮어쓴다. 초기화 대신 콘텐츠를 살리려면 **서버가
+  꺼진 사이** 스크래치 스크립트로 파일을 새 모양으로 한 번 옮기고, 원본은 `backups/`에 둔다(예: 0015의 `backups/before-stages/`).
+  모드 안 변환 코드는 여전히 첫 공개 뒤에(CLAUDE.md).
 - **에디터 입력을 Claude에게 맡기기**: 사용자가 맡기면 사용자 서버의 에디터(`http://localhost:8080`)를 브라우저 패널로 조작해 NPC·퀘스트를 입력하고 publish한다. 끝나면 `/api/npcs`·`/api/quests`로 다시 읽어 확인한다. 사용자 브라우저에 에디터가 열려 있었다면 새로고침해야 한다(옛 화면에서 publish하면 덮어씀). 게임 쪽(소환·플레이)은 사용자 몫. 화면에 칸이 없거나 한꺼번에 고칠 때는 아래 "에디터 API로 작업하기".
   브라우저 패널 요령:
   - "+ NPC"·"+ Quest"·"+ Folder"의 이름 입력(`window.prompt`)은 패널에서 곧바로 닫힌다 → 그 탭에서
@@ -54,6 +58,9 @@
   - 패널이 가려져 있으면(화면 크기 0) 좌표 클릭이 안 되고, 포커스 이벤트와 `requestAnimationFrame`이 멈춘다. 스크립트로
     `focus()`·`click()`하고 입력은 `document.execCommand('insertText', …)`(React가 실제 타이핑처럼 받음)로 한다. 에디터 코드가
     포커스 이벤트나 rAF에 기대면 여기서 드러난다(표시 버튼이 엉뚱한 줄에 들어간 버그, 조각 3).
+  - 드래그 앤 드롭과 우클릭은 이벤트를 직접 만든다: `el.dispatchEvent(new DragEvent('dragstart'|'dragover'|'drop', {bubbles: true,
+    cancelable: true, dataTransfer: new DataTransfer(), clientY}))`(한 `DataTransfer`를 끝까지 같이 씀, 이벤트 사이에 잠깐 기다림),
+    우클릭은 `new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX, clientY})`(조각 4의 단계 트리).
   - **서버를 다시 켜지 않고 새 에디터 보기**: `npx vite build --outDir <스크래치패드>/editor-build`로 빌드하고, 그 `index.html`을
     내어 주고 `/api/*`는 8080으로 넘기는 표준 라이브러리 파이썬 서버를 8090에 띄운다(Bash `run_in_background`, 끝나면 `TaskStop`).
     publish까지 실제 서버로 간다. 시험 입력은 끝나면 되돌리고, 먼저 복사해 둔 `npcs.json`·`quests.json`과 `diff`로 같은지 본다.
@@ -78,6 +85,9 @@
 - 번호 매긴 절차. 각 항목에 **무엇을 하면 → 무엇이 보여야 하는지**.
 - 실패·되돌리기 경로도 포함(예: 리소스팩을 끄면 스티브로 보여야 함, 참조 중인 NPC 삭제는 거부돼야 함).
 - 명령어 권한 등 전제 조건을 맨 앞에.
+- 핵심 항목에는 **로그·기록에 남는 증거**를 적는다(예: 서버 로그 `Moved 1 player(s)`, Players의 단계). 사용자가 완료라고 하면
+  그 증거를 한 번 본다(일곱 번째 이야기 조각 3: 핵심 확인이 빠진 것을 로그로 찾아 확인 전용 퀘스트로 다시 함).
+- 절차가 **앞 조각의 검사 규칙**에 걸리지 않는지 본다(예: `from` 없는 목표가 있는 단계를 맨 앞으로 옮기라고 해서 publish가 거부됨).
 
 ## 문제가 생기면
 
