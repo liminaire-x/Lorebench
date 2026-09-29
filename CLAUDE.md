@@ -67,7 +67,7 @@
    - **IntelliJ = 동작 게이트**. 번호 매긴 게임 확인 체크리스트를 드리고, 사용자 확인까지 받고 다음 조각으로.
    - **테스트는 비싼 것에 붙인다**: 저장 형식·id처럼 깨지면 데이터가 손상되는 곳은 처음부터 테스트 동반.
 4. 게임 쪽 문제는 **`run/logs/latest.log`부터** 본다. 추측보다 증거.
-5. 에셋(NPC 모델)은 Blockbench MCP + `.claude/skills/`의 Blockbench 스킬(`blockbench-use` 먼저). 에셋 파일은 저장소에 넣지 않는다.
+5. 에셋(NPC 모델)은 에셋 담당 에이전트 `.claude/agents/asset-artist.md`(Blockbench MCP + `.claude/skills/`)에 이야기 파일의 **에셋 주문서**로 맡기고, Claude는 코드를 한다(흐름은 workflow "에셋 작업"). 에셋 파일은 저장소에 넣지 않는다.
 6. 호출부 파악은 grep/read + CI 컴파일로 한다.
 
 ## 도구 환경 (에이전트용)

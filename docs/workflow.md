@@ -110,39 +110,15 @@
 
 ## 에셋 작업 (Blockbench MCP → GeckoLib)
 
-**서브에이전트에 맡긴다**(사용자 방식, 모델은 **Opus** 지정): 지시에 파일 경로, 바꾸지 말 것(기존 애니메이션·형태·텍스처), 백업,
-아래 요령(부호, 스냅, `risky_eval`, 시작·절정·끝 스크린샷)을 담고 뒤에서 돌리는 동안 Claude는 코드를 한다. 결과는 보고만 믿지 않고
-**스크린샷과 내보낸 파일**(애니메이션 개수·형식 버전)을 직접 확인한다. 에이전트가 찾은 요령은 아래에 옮긴다(예: 회전 부호, `shocked`).
+에셋은 코드와 따로 가는 **협업 작업**이다. 에셋 담당 에이전트 [`asset-artist`](../.claude/agents/asset-artist.md)(모델 Opus)가
+맡고, Blockbench 요령·도구의 특이점·파일 위치·백업은 그 파일에만 적는다(사용자 방식, 2026-09-29).
 
-스킬: `.claude/skills/`의 Blockbench 스킬. **`blockbench-use`를 먼저** 읽고 분야별 스킬(모델링·텍스처·애니메이션)로 넘어간다.
-
-1. **새 모델이면 먼저 묻기**: 외형 / 성능 / 균형 중 무엇을 우선하나.
-2. **형식**: `geckolib_model`(GeckoLib 플러그인), **박스 UV**. 그래야 geometry가 GeckoLib이 지원하는 `format_version 1.12.0`으로 나온다.
-3. **텍스처**: UV 배치에 맞춰 스크립트(Node, 외부 라이브러리 없음)로 그리고, 스크립트도 원본으로 보관한다.
-4. **애니메이션**:
-   - 회전 부호는 스크린샷(정면·옆)으로 먼저 확인한다. Blockbench 안에서 X 양수는 **아래로 늘어진 부위(팔)를 앞으로**,
-     **위로 뻗은 부위(머리, 발 기준의 몸 전체)는 뒤로 젖힌다**(머리 +X = 위를 봄, `shocked` 때 확인). 그래서 `happy`의 머리 -12는 살짝 아래를 본다.
-   - 몸 전체를 젖힐 때는 `body`가 아니라 `rig_root`를 돌린다. `body`는 회전 중심이 목에 있어 엉덩이가 앞으로 빠진다.
-   - **내보낸 파일은 X·Y 부호가 뒤집혀 있다**(Blockbench +70 → `.animation.json` -70). 내보낸 파일의 값을 Blockbench에
-     그대로 넣으면 팔이 뒤로 간다. 기존 애니메이션을 참고할 때는 Blockbench 안의 값을 읽는다.
-   - 애니메이션 격자(`snapping`)를 키 간격에 맞춘다(0.05초 단위면 20fps). 기본 24fps면 0.8초가 0.7917초로 밀려 반복 이음새가 어긋난다.
-   - 시작·중간·끝 자세와 반복 이음새를 확인한다. 시작 자세 하나로는 동작을 검증할 수 없다.
-5. **내보내기**:
-   - geometry는 `export_model`의 `bedrock` 코덱으로 뽑는다(X 부호 반전은 Bedrock 규칙이고 GeckoLib이 되돌린다).
-   - 애니메이션은 형식의 애니메이션 코덱 `compileFile`로 뽑는다(`format_version 1.8.0`).
-   - 편집 가능한 `.bbmodel`도 함께 저장한다.
-6. **배치**: 리소스팩의 `assets/lorebench/{geo,animations,textures}/npc/<model>`. 테스트 팩은 `run/resourcepacks/lorebench-test/`(git 밖, 에셋은 저장소에 넣지 않는다).
-
-**Blockbench 도구의 특이점**
-- `place_cube`는 텍스처가 먼저 있어야 한다(없으면 `No texture found`).
-- `create_animation`은 이름 앞에 `animation.`을 붙인다. `chief.happy`로 넘기면 `animation.chief.happy`가 된다.
-- 키프레임 편집은 **애니메이션 모드**에서만 된다. 모드를 바꾸고 애니메이션을 선택한 뒤 편집한다.
-- 등록된 형식 목록을 주는 전용 도구가 없다. 프로젝트가 열린 상태에서 `risky_eval`로 `Object.keys(Formats)`를 읽는다(프로젝트가 없으면 실행 도구가 실패한다).
-- 프로젝트가 없으면 편집·스크린샷 도구가 꺼져 있고 도구 검색에도 안 나온다. 그때는 `risky_eval`로 한다(대화 몸짓 에셋 때 쓴 방법):
-  - 열기: `Blockbench.read([경로], {readtype:'text'}, files => loadModelFile(files[0]))`
-  - 애니메이션 만들기: `new Animation({name, loop, length, snapping: 20}).add(false)` → `anim.getBoneAnimator(group).addKeyframe({channel, time, interpolation, data_points: [{x, y, z}]})`,
-    `Undo.initEdit`·`finishEdit`로 감싼다.
-  - 자세 보기: `anim.select()` → `Timeline.setTime(t)` → `Animator.preview()`, 카메라는 `Preview.selected.camera.position.set(…)` +
-    `controls.target.set(…)` + `controls.update()`, 그다음 `capture_app_screenshot`. 모델은 -Z가 앞(얼굴 쪽).
-  - 내보내기·저장: `Format.animation_codec.compileFile(Animation.all)`을 탭 들여쓰기 JSON으로, `.bbmodel`은 `Codecs.project.compile()`,
-    둘 다 `require('fs').writeFileSync`. 저장 뒤 `Project.saved = true`.
+1. **주문서**(설계, 조각 0): 장면에서 필요한 에셋을 뽑아 이야기 파일의 "에셋" 칸에 적고 사용자에게 확인받는다(형식은
+   [devlog/README.md](devlog/README.md)). 애니메이션 **이름**은 대사(`<play=…>`)와 NPC 문서가 가리켜 **비싸니** 여기서 정한다.
+   새 모델이면 외형 / 성능 / 균형 중 무엇을 우선할지 먼저 묻는다.
+2. **맡기기**(조각 1을 시작할 때): `asset-artist`를 뒤에서 부르고(이야기 파일 경로와 주문서를 넘김) Claude는 코드를 한다.
+   Blockbench는 하나라 **에셋 에이전트는 한 번에 하나**. 이야기 조립 전에 끝나 있으면 된다.
+3. **확인**: 보고만 믿지 않고 **내보낸 파일**(애니메이션 개수·형식 버전)과 보고의 확인 시각대로 **Blockbench 스크린샷**(시작·절정·끝)을
+   Claude가 직접 본다. 에이전트가 돌려준 질문은 사용자에게 묻는다.
+4. **검수**: 스크린샷을 사용자에게 보여 느낌을 통과받고, 주문서의 상태를 "통과"로 바꾼다. 게임 안 확인은 이야기 조립 때.
+5. **요령 옮기기**: 에이전트가 새로 찾은 요령은 `asset-artist.md`의 "요령"·"특이점"에 옮긴다(예: 회전 부호, `shocked`).
