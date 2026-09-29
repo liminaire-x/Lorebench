@@ -115,6 +115,41 @@
   옆·뒤에서 말 걸면 돌아봄, 닫으면 천천히 원래 방향, Dev2 화면은 그대로(Dev1·Dev2 따로), 30초 유지, 스티브도 돎,
   돌아가는 도중 다시 말 걸면 그 자리에서 다시 돎.
 
+## 뼈대와 만화 느낌
+
+NPC가 뻣뻣하다(사용자, 2026-09-30): 모델이 바닐라 6조각이라 팔꿈치·무릎이 없고, 애니메이션에 완급(easing)이 하나도 없어
+일정한 속도로 움직인다. 뼈를 더하고 만화 느낌(탄력 있는 완급, 늘었다 줄었다, 예비 동작)을 넣는다. 에셋만 바꾸므로 코드·CI는 없고
+게임 확인만 한다.
+
+- [x] **0. 설계** (정함, 2026-09-30):
+  - 사례: 팔꿈치·무릎은 모두 넣는다(Mo' Bends, Fresh Animations: Player Extension, Emotecraft, Epic Fight, Roblox R15, VRM 1.0).
+    허리는 R15(윗몸·아랫몸)와 VRM(척추 필수, 가슴 선택). 손·발(아이템 쥐는 자리)은 무언가를 드는 이야기 때, 목은 넣지 않는다.
+  - **뼈 5개**, 이름은 바닐라식 소문자 + VRM 낱말: `chest`, `right_lower_arm`, `left_lower_arm`, `right_lower_leg`, `left_lower_leg`.
+    기존 6개(`head`·`body`·`right_arm`·`left_arm`·`right_leg`·`left_leg`)는 이름 그대로(`right_arm` = 윗팔). 지금은 애니메이션이
+    모델마다 따로라 쌈, 첫 공개 뒤엔 모델러·애드온이 기대므로 비쌈. 뼈대 규격(필수 + 선택)은 roadmap B "애니메이션 공유"에서 확정.
+  - 관계: `rig_root` → `body`(아랫몸, 회전 중심을 목에서 엉덩이로) → `chest`(윗몸) → `head`·`right_arm`·`left_arm`, 아래팔은 팔 아래,
+    다리와 정강이는 `rig_root` 아래 그대로. VRM의 `hips → spine → chest`와 같은 모양. 기존 애니메이션 7개는 `body`를 움직이지
+    않아 그대로 움직인다. GeckoLib은 모델에 없는 뼈의 키프레임을 건너뛴다(`crashIfBoneMissing` 기본 false).
+  - 관절을 자르는 곳·이음새: [`asset-artist`](../../.claude/agents/asset-artist.md) "요령"의 관절.
+  - 게임 확인은 딸의 평소 동작(`idle`)을 `sit`로. 말을 걸면 `talk_start`로 벌떡 서는 것, 이름표가 서 있는 높이에 뜨는 것은
+    이번엔 그대로 둔다(앉은 채 대화는 roadmap B "NPC 일과표·상태", 이름표는 코드).
+  - 기존 애니메이션을 만화 느낌으로 다시 만들기(`wave`·`happy`·`shocked`)는 `sit` 결과를 보고 다음 주문으로.
+- [ ] **1. 뼈 5개 + `sit`** (에셋, 아래 주문서)
+- [ ] **2. 게임 확인**: 딸의 `idle`을 `sit`로 바꾸고 확인.
+
+### 에셋
+
+| 모델 | 이름 | 한 번/반복 | 길이 | 느낌 | 쓰는 곳 | 상태 |
+|---|---|---|---|---|---|---|
+| chief | 뼈 5개 | — | — | 위 설계의 이름·관계. 몸통·팔·다리 상자를 반씩 나누고 텍스처 배치를 다시 그리되 겉모습(색·크기)은 그대로 | 모든 NPC(넷 다 chief) | 주문 |
+| chief | animation.chief.sit | 반복 | 4초 | 엉덩이를 땅에 대고 다리를 앞으로 뻗어 앉는다(무릎은 살짝 굽혀 편하게). 팔은 앞으로 내려 손이 다리 사이에(팔꿈치 살짝 굽힘). 윗몸은 숨 쉬듯 살짝 들썩. 머리는 왼쪽 → 잠깐 멈춤 → 오른쪽 → 가운데로 두리번, 돌릴 때 살짝 넘쳤다 돌아오고(`easeOutBack`) 가끔 갸웃 | 딸의 평소 동작 | 주문 |
+
+- 바꾸지 말 것: 기존 애니메이션 7개(두세 개를 틀어 전과 같은지 확인), 겉모습
+- 확인 스크린샷: `sit`의 시각들 + 무릎·팔꿈치를 90도로 굽힌 옆모습, 허리를 굽힌 옆모습(애니메이션 밖에서 자세만)
+- 참고: Emotecraft 이모트 캡처(사용자, 2026-09-30) `run/resourcepacks/lorebench-test/source/reference/`의
+  `emotecraft-sit-{front,side,bottom,back}.png`(`sit`의 자세), `emotecraft-kneel-*.png`(무릎 굽힘)
+- 이름 `sit`: 나중에 앉기·일어나기가 생기면 `sit_start`·`sit`·`sit_end`로 `talk_start`·`talk`·`talk_end`와 같은 모양이 된다.
+
 ## 이야기 없이 한 정리
 
 roadmap A 바구니("이야기 없이 해도 되는 정리")에서 끝낸 것.
