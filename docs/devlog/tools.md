@@ -136,6 +136,8 @@ NPC가 뻣뻣하다(사용자, 2026-09-30): 모델이 바닐라 6조각이라 �
   - 기존 애니메이션을 만화 느낌으로 다시 만들기(`wave`·`happy`·`shocked`)는 `sit` 결과를 보고 다음 주문으로.
 - [ ] **1. 뼈 5개 + `sit`** (에셋, 아래 주문서)
 - [ ] **2. 게임 확인**: 딸의 `idle`을 `sit`로 바꾸고 확인.
+- [ ] **3. `dance_sway`** (에셋, 사용자 영상 2026-09-30): 1이 끝난 뒤 맡긴다(Blockbench 하나). 게임 확인은 당근 도둑 완료 대사
+  "고맙네! 이제 당근이 다시 자라겠구먼."(지금 `happy`)을 `{ name: dance_sway, play: loop }`로 바꿔서.
 
 ### 에셋
 
@@ -143,11 +145,13 @@ NPC가 뻣뻣하다(사용자, 2026-09-30): 모델이 바닐라 6조각이라 �
 |---|---|---|---|---|---|---|
 | chief | 뼈 5개 | — | — | 위 설계의 이름·관계. 몸통·팔·다리 상자를 반씩 나누고 텍스처 배치를 다시 그리되 겉모습(색·크기)은 그대로 | 모든 NPC(넷 다 chief) | 주문 |
 | chief | animation.chief.sit | 반복 | 4초 | 엉덩이를 땅에 대고 다리를 앞으로 뻗어 앉는다(무릎은 살짝 굽혀 편하게). 팔은 앞으로 내려 손이 다리 사이에(팔꿈치 살짝 굽힘). 윗몸은 숨 쉬듯 살짝 들썩. 머리는 왼쪽 → 잠깐 멈춤 → 오른쪽 → 가운데로 두리번, 돌릴 때 살짝 넘쳤다 돌아오고(`easeOutBack`) 가끔 갸웃 | 딸의 평소 동작 | 주문 |
+| chief | animation.chief.dance_sway | 반복 | 0.8초 | 무릎을 바깥으로 벌려 굽힌 낮은 자세(개구리 다리, 발은 바닥에)로 몸을 좌우로 흔든다. 0.4초에 반대편 끝. 두 팔은 팔꿈치를 굽혀 손을 머리 높이로 들고, 기우는 쪽에 따라 번갈아 오르내린다. 머리는 몸을 따라 갸웃. 참고 영상이 정면뿐이라 앞뒤 기울기는 자연스럽게 | 당근 도둑 완료 대사(반복) | 주문 |
 
 - 바꾸지 말 것: 기존 애니메이션 7개(두세 개를 틀어 전과 같은지 확인), 겉모습
 - 확인 스크린샷: `sit`의 시각들 + 무릎·팔꿈치를 90도로 굽힌 옆모습, 허리를 굽힌 옆모습(애니메이션 밖에서 자세만)
 - 참고: Emotecraft 이모트 캡처(사용자, 2026-09-30) `run/resourcepacks/lorebench-test/source/reference/`의
-  `emotecraft-sit-{front,side,bottom,back}.png`(`sit`의 자세), `emotecraft-kneel-*.png`(무릎 굽힘)
+  `emotecraft-sit-{front,side,bottom,back}.png`(`sit`의 자세), `emotecraft-kneel-*.png`(무릎 굽힘),
+  `emotecraft-dance-front-00-0.00s.png`~`08-0.80s.png`(`dance_sway` 한 바퀴를 0.1초 간격으로, 원본 `emotecraft-dance-front.mp4`)
 - 이름 `sit`: 나중에 앉기·일어나기가 생기면 `sit_start`·`sit`·`sit_end`로 `talk_start`·`talk`·`talk_end`와 같은 모양이 된다.
 
 ## 이야기 없이 한 정리
