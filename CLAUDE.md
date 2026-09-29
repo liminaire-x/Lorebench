@@ -4,8 +4,8 @@
 만들고 **publish → 서버 반영**. 클라이언트+서버 모드(GeckoLib 애니메이션, 자체 퀘스트 화면).
 방향: 취미로 지속 개발, 점차 규모 있는 프로젝트로 성장. 채택을 성공의 전제로 삼지 않음.
 
-이 파일은 매 세션 로드되는 **짧은 가이드**다. 개념은 [docs/map.md](docs/map.md), 이야기는
-[docs/stories.md](docs/stories.md), 진행 상태는 [docs/roadmap.md](docs/roadmap.md)에만 있다.
+이 파일은 매 세션 로드되는 **짧은 가이드**다. 개념은 [docs/map.md](docs/map.md), 이야기(장면·조각·확인
+기록)는 [docs/devlog/](docs/devlog/README.md)에 한 파일씩, 지금 하는 이야기와 다음 후보는 [docs/roadmap.md](docs/roadmap.md)에만 있다.
 
 ## 지금 방향이 나온 이유
 - **이야기 중심**: v2 설계가 AI 주도로 사용자가 소화하는 속도보다 빨리 두꺼워져, 사용자가 도메인 감을
@@ -60,7 +60,7 @@
 
 ## 개발 워크플로우
 자세한 내용(조각 흐름·완료 정의·게임 확인 형식·에셋 작업)은 [docs/workflow.md](docs/workflow.md). 요약:
-1. **조각 단위로 진행**한다([docs/roadmap.md](docs/roadmap.md)). 각 조각은 게임 안에서 확인된다.
+1. **조각 단위로 진행**한다(지금 이야기는 [docs/roadmap.md](docs/roadmap.md), 조각은 그 이야기의 devlog 파일). 각 조각은 게임 안에서 확인된다.
 2. **외부 동작은 소스·문서로 확인**하고 추측하지 않는다. 결정은 선택지 + 추천 + 고치는 비용 → 사용자.
 3. 검증:
    - **CI = 컴파일 게이트**. 커밋 → master push → 사후 CI 확인, 실패 시 fix-forward. 성공 판정은 **`gh run view <id> --json conclusion`으로 명시 확인**(`gh run watch` exit 코드만 믿지 말 것, 실패를 green으로 오독해 보고한 적 있음) + 테스트 리포트에서 **실행 개수** 확인(세는 법, 연달아 push해 앞 실행이 취소됐을 때의 판정은 [workflow](docs/workflow.md) 조각 흐름 8).
