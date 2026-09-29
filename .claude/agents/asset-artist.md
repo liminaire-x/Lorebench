@@ -37,21 +37,37 @@ GeckoLib 형식으로 내보낸다. 코드와 문서(`src/`, `editor/`, `docs/`)
      두면 팔꿈치와 같은 높이가 된다. 팔꿈치가 너무 위(4/8)면 어깨에서 꺾여 지느러미처럼, 너무 아래(8/4)면 손만 까딱이는
      티라노 팔이 된다. 무릎이 너무 위면 꿇을 때 주저앉은 듯, 너무 아래면 발이 엉덩이에 못 닿는다.
    - **회전 중심**: 자른 선 위, 부위 두께의 가운데.
-   - **이음새**: 아래 조각을 위 조각 안으로 **두께의 절반**(두께 4면 2픽셀) 겹쳐 둔다. 곧을 때는 숨어 있다가 90도로 굽히면
-     바깥 모서리를 채운다. 그냥 자르면 굽힐 때 바깥 모서리가 계단처럼 파인다.
-   - **깜빡임**: 곧을 때 겹친 부분의 옆면이 위 조각의 옆면과 같은 자리에 오면 깜빡인다(z-fighting). 겹친 조각을 아주 조금
-     작게 해서 피하고, 쓴 값을 새 요령으로 돌려준다.
+   - **이음새**: 아래 뼈에 겹친 조각(`<뼈>_joint`)을 두어 위 조각 안으로 **두께의 절반**(두께 4면 2픽셀) 들어가게 한다. 곧을 때는
+     숨어 있다가 90도로 굽히면 바깥 모서리를 채운다. 그냥 자르면 굽힐 때 바깥 모서리가 계단처럼 파인다.
+   - **깜빡임**: 곧을 때 겹친 조각의 옆면이 위 조각의 옆면과 같은 자리에 오면 깜빡인다(z-fighting). 겹친 조각을 `inflate -0.05`로
+     줄인다(0.02는 먼 거리에서 깜빡일 수 있음, GeckoLib이 cube의 `inflate`를 읽음). 줄이면 아래 조각과 맞닿은 끝에도 0.05 틈이 생겨
+     굽힐 때 흰 선으로 비치므로, 겹친 조각을 아래 조각 안으로 1픽셀 더 내려 **3픽셀**(위 2 + 아래 1)로 한다(chief, 2026-09-30).
+   - **중간 각도의 돌기**: 90도에서는 딱 맞지만 중간 각도에서는 겹친 조각의 모서리가 위 조각 밖으로 나온다(45도에서 최대 약 0.83픽셀).
+     팔꿈치·무릎에서는 관절 끝처럼 보인다.
    - **확인**: 90도로 굽힌 옆모습 스크린샷. 90도보다 깊이 굽혀(정좌) 안쪽이 파고드는 것은 안에 숨으므로 괜찮다.
+   - **chief의 뼈대**(2026-09-30): `rig_root` → `body`(아랫몸 y12–18, 회전 중심 엉덩이 (0,12,0)) → `chest`(윗몸 y18–24, (0,18,0)) →
+     `head`·`right_arm`·`left_arm`, 아래팔 `right_lower_arm`(-6,18,0)·`left_lower_arm`(6,18,0). 다리는 `rig_root` 아래, 정강이
+     `right_lower_leg`(-2,6,0)·`left_lower_leg`(2,6,0). 텍스처 스크립트는 옛 배치로 칠한 뒤 새 상자마다 같은 높이의 줄을 옮겨 온다
+     (새 배치는 스크립트 머리 주석).
+   - **뼈를 바꾸기 전후 비교는 숫자로**: 바꾸기 전에 기존 애니메이션을 돌리며 주요 점의 월드 위치(`group.mesh.localToWorld(점 - origin)`)를
+     저장하고, 바꾼 뒤 같은 점과 비교한다.
 4. **애니메이션**:
    - 회전 부호는 스크린샷(정면·옆)으로 먼저 확인한다. Blockbench 안에서 X 양수는 **아래로 늘어진 부위(팔)를 앞으로**,
      **위로 뻗은 부위(머리, 발 기준의 몸 전체)는 뒤로 젖힌다**(머리 +X = 위를 봄, `shocked` 때 확인). 그래서 `happy`의 머리 -12는 살짝 아래를 본다.
-   - 몸 전체를 젖힐 때는 `body`가 아니라 `rig_root`를 돌린다. `body`는 회전 중심이 목에 있어 엉덩이가 앞으로 빠진다.
+   - 몸 전체를 젖힐 때는 `rig_root`를 돌린다. `body`는 엉덩이에서 윗몸을 굽히고(다리는 그대로), `chest`는 허리에서 굽힌다.
+   - **좌우가 거울**: 정면에서 볼 때 `right_arm`(-X)이 화면 오른쪽에 있다. "왼쪽을 본다" = `left_arm` 쪽 = Blockbench Y 음수(내보낸 파일에서는 양수).
+   - 회전 순서가 X → Y → Z라서, 앞으로 뻗은 다리를 옆으로 벌리려면 Y를 쓴다. 팔을 모을 때도 Z보다 Y가 낫다(Z는 어깨가 벌어짐).
+   - **GeckoLib 완급**(`geckolib_set_keyframe_easing`): 그 키로 **들어가는 구간**에 걸리고 linear 키에만 붙는다. `easeOutBack`은
+     Blockbench 미리보기에서도 넘친다. 키가 하나인 채널은 `{"vector": …}`로 나오고 GeckoLib이 0초 키로 읽는다.
+   - 머리를 돌릴 때 수염처럼 목 아래로 내려온 조각이 어깨에 묻히는지 본다(chief는 앉은 자세에서 30도부터 닿음).
    - **내보낸 파일은 X·Y 부호가 뒤집혀 있다**(Blockbench +70 → `.animation.json` -70). 내보낸 파일의 값을 Blockbench에
      그대로 넣으면 팔이 뒤로 간다. 기존 애니메이션을 참고할 때는 Blockbench 안의 값을 읽는다.
    - 애니메이션 격자(`snapping`)를 키 간격에 맞춘다(0.05초 단위면 20fps). 기본 24fps면 0.8초가 0.7917초로 밀려 반복 이음새가 어긋난다.
    - 시작·중간·끝 자세와 반복 이음새를 확인한다. 시작 자세 하나로는 동작을 검증할 수 없다.
 5. **내보내기**:
-   - geometry는 `export_model`의 `bedrock` 코덱으로 뽑는다(X 부호 반전은 Bedrock 규칙이고 GeckoLib이 되돌린다).
+   - geometry는 `geckolib_export_model`로 뽑는다(`format_version 1.12.0`, X 부호 반전은 Bedrock 규칙이고 GeckoLib이 되돌린다).
+     Blockbench 5.2.1 + 플러그인 1.9.2에서는 `export_model`의 `bedrock` 코덱이 `geckolib_model` 프로젝트에서 꺼져 있다.
+   - `geckolib_validate_model`의 "`geckolib_modid`가 비었다" 오류는 내보낸 파일에 쓰이지 않아 무시한다.
    - 애니메이션은 형식의 애니메이션 코덱 `compileFile`로 뽑는다(`format_version 1.8.0`).
    - 편집 가능한 `.bbmodel`도 함께 저장한다.
 
@@ -67,6 +83,8 @@ GeckoLib 형식으로 내보낸다. 코드와 문서(`src/`, `editor/`, `docs/`)
     `Undo.initEdit`·`finishEdit`로 감싼다.
   - 자세 보기: `anim.select()` → `Timeline.setTime(t)` → `Animator.preview()`, 카메라는 `Preview.selected.camera.position.set(…)` +
     `controls.target.set(…)` + `controls.update()`, 그다음 `capture_app_screenshot`. 모델은 -Z가 앞(얼굴 쪽).
+  - 스크린샷을 파일로(메인 대화가 직접 보도록): `Preview.selected.screenshot({crop:false}, cb)`의 dataURL을 `fs.writeFileSync`로
+    `source/review/<날짜>-<작업>/`에. 직교 투영은 `setProjectionMode(true)` + `camera.zoom`(0.62), 끝나면 원근으로 되돌린다.
   - 내보내기·저장: `Format.animation_codec.compileFile(Animation.all)`을 탭 들여쓰기 JSON으로, `.bbmodel`은 `Codecs.project.compile()`,
     둘 다 `require('fs').writeFileSync`. 저장 뒤 `Project.saved = true`.
 
