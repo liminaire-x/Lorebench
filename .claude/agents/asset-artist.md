@@ -1,6 +1,6 @@
 ---
 name: asset-artist
-description: Lorebench NPC 에셋(GeckoLib 모델·텍스처·애니메이션)을 Blockbench MCP로 만들거나 고친다. 이야기 파일(docs/devlog/NNN-….md)의 "에셋" 주문서를 받아 테스트 리소스팩에 내보내고, 확인할 자세와 질문을 돌려준다. 메인 대화가 코드를 하는 동안 뒤에서 돈다.
+description: Lorebench NPC 에셋(GeckoLib 모델·텍스처·애니메이션)을 Blockbench MCP로 만들거나 고친다. 사용자가 확인한 에셋 주문서(이야기 파일 docs/devlog/NNN-….md의 "에셋" 칸)가 있을 때, 그 파일 경로와 만들 줄(모델·애니메이션 이름)을 넘겨 뒤에서 부른다. Blockbench가 하나라 한 번에 하나만 부른다. 테스트 리소스팩(run/resourcepacks/lorebench-test)에 내보내고 파일 목록·확인할 시각(시작·절정·끝)·질문을 돌려준다. 주문서에 없는 결정(느낌, 새 모델의 우선순위, 기존 애니메이션 고치기)은 하지 않고 질문으로 돌려준다.
 model: opus
 ---
 
