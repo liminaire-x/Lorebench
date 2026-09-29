@@ -56,7 +56,14 @@ GeckoLib 형식으로 내보낸다. 코드와 문서(`src/`, `editor/`, `docs/`)
      **위로 뻗은 부위(머리, 발 기준의 몸 전체)는 뒤로 젖힌다**(머리 +X = 위를 봄, `shocked` 때 확인). 그래서 `happy`의 머리 -12는 살짝 아래를 본다.
    - 몸 전체를 젖힐 때는 `rig_root`를 돌린다. `body`는 엉덩이에서 윗몸을 굽히고(다리는 그대로), `chest`는 허리에서 굽힌다.
    - **좌우가 거울**: 정면에서 볼 때 `right_arm`(-X)이 화면 오른쪽에 있다. "왼쪽을 본다" = `left_arm` 쪽 = Blockbench Y 음수(내보낸 파일에서는 양수).
-   - 회전 순서가 X → Y → Z라서, 앞으로 뻗은 다리를 옆으로 벌리려면 Y를 쓴다. 팔을 모을 때도 Z보다 Y가 낫다(Z는 어깨가 벌어짐).
+   - 회전 순서가 X → Y → Z라서(R = Rz·Ry·Rx, 오른손 법칙), 앞으로 뻗은 다리를 옆으로 벌리려면 Y를 쓴다. 팔을 모을 때도 Z보다 Y가
+     낫다(Z는 어깨가 벌어짐). 선 다리를 옆으로 벌릴 때 `right_*`는 Z 음수, `left_*`는 Z 양수가 바깥이다. 위치 X +1은 월드에서도 +X
+     (내보낸 파일에서는 회전 X·Y와 위치 X의 부호가 뒤집힘).
+   - **발을 바닥에 고정한 채 몸을 움직일 때**(`dance_sway`): 다리 각도를 IK로 계산해 양 끝과 **가운데에도** 키를 넣는다. 양 끝 두 키만
+     쓰면 중간 자세가 두 해의 평균이 되어 발이 뜬다. 가운데 키에 easeIn/easeOut Sine을 나눠 걸면 엉덩이의 easeInOutSine과 같은
+     진행 곡선이 된다. 무릎 방향은 pole 벡터로, 허벅지는 X→Y, 정강이는 X→Z 순서로 푼다.
+   - **한 채널의 키 완급은 xyz가 함께 쓴다**: 좌우 흔들기(한 바퀴에 한 번)와 위아래 들썩임(두 번)을 한 채널에 같이 넣을 수 없으니 다른
+     뼈의 채널로 뺀다.
    - **GeckoLib 완급**(`geckolib_set_keyframe_easing`): 그 키로 **들어가는 구간**에 걸리고 linear 키에만 붙는다. `easeOutBack`은
      Blockbench 미리보기에서도 넘친다. 키가 하나인 채널은 `{"vector": …}`로 나오고 GeckoLib이 0초 키로 읽는다.
    - 머리를 돌릴 때 수염처럼 목 아래로 내려온 조각이 어깨에 묻히는지 본다(chief는 앉은 자세에서 30도부터 닿음).
@@ -68,6 +75,7 @@ GeckoLib 형식으로 내보낸다. 코드와 문서(`src/`, `editor/`, `docs/`)
    - geometry는 `geckolib_export_model`로 뽑는다(`format_version 1.12.0`, X 부호 반전은 Bedrock 규칙이고 GeckoLib이 되돌린다).
      Blockbench 5.2.1 + 플러그인 1.9.2에서는 `export_model`의 `bedrock` 코덱이 `geckolib_model` 프로젝트에서 꺼져 있다.
    - `geckolib_validate_model`의 "`geckolib_modid`가 비었다" 오류는 내보낸 파일에 쓰이지 않아 무시한다.
+   - `geckolib_export_model`의 `visible_bounds_width`는 **지금 미리보기 자세**를 반영한다. geo는 애니메이션을 멈춘 기본 자세에서 뽑는다.
    - 애니메이션은 형식의 애니메이션 코덱 `compileFile`로 뽑는다(`format_version 1.8.0`).
    - 편집 가능한 `.bbmodel`도 함께 저장한다.
 
@@ -77,6 +85,7 @@ GeckoLib 형식으로 내보낸다. 코드와 문서(`src/`, `editor/`, `docs/`)
 - `create_animation`은 이름 앞에 `animation.`을 붙인다. `chief.happy`로 넘기면 `animation.chief.happy`가 된다.
 - 키프레임 편집은 **애니메이션 모드**에서만 된다. 모드를 바꾸고 애니메이션을 선택한 뒤 편집한다.
 - 등록된 형식 목록을 주는 전용 도구가 없다. 프로젝트가 열린 상태에서 `risky_eval`로 `Object.keys(Formats)`를 읽는다(프로젝트가 없으면 실행 도구가 실패한다).
+- `risky_eval`은 최상위 `await`를 받지 않는다(SyntaxError). Promise를 반환하면 기다려 준다(스크린샷 여러 장은 Promise를 이어서).
 - 프로젝트가 없으면 편집·스크린샷 도구가 꺼져 있고 도구 검색에도 안 나온다. 그때는 `risky_eval`로 한다(대화 몸짓 에셋 때 쓴 방법):
   - 열기: `Blockbench.read([경로], {readtype:'text'}, files => loadModelFile(files[0]))`
   - 애니메이션 만들기: `new Animation({name, loop, length, snapping: 20}).add(false)` → `anim.getBoneAnimator(group).addKeyframe({channel, time, interpolation, data_points: [{x, y, z}]})`,
