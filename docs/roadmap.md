@@ -74,6 +74,10 @@
   묶으면 같은 뼈대의 모델끼리 공유(Bedrock 분리 파일·Unity Humanoid 방식). 몹 적용은 (가) Lorebench 전용 몹(쌈) /
   (나) 바닐라 몹 교체(GeckoLib `GeoReplacedEntityRenderer`, 한 마리만 바꿀 수 있는지 미확인) / (다) 바닐라 모델 직접
   움직이기(playerAnimator식, 비쌈). 뼈대 이름·파일 경로 규칙은 리소스팩에 남아 비쌈.
+- NPC 표정(움직이는 텍스처) (사용자, 2026-09-29, 더 자세히 이야기하기로 함): 뼈대를 움직이는 대신 **그림을 바꿔** 눈 깜빡임·입
+  모양 같은 표정을 낸다(여러 그림을 세로로 이어 붙여 한 칸씩 넘기는 방식, 바닐라의 물·용암·불과 같음). 모르는 것: GeckoLib
+  모델에서 되는지, 대사·글 안 표시(`<play=…>`)와 어떻게 잇나. 에셋 작업은 저장소에 없는 Blockbench 스킬
+  `blockbench-flipbook-textures`가 맡으므로, 그때 받아 온다(`.claude/skills`의 깨진 링크는 그대로 둠).
 - 리소스팩 자동화: Lorebench가 자기 폴더(예: `config/lorebench/assets`)를 항상 켜진 리소스팩으로 등록하면
   모드팩에 Paxi 같은 모드가 필요 없다. 더 나아가 서버가 팩을 호스팅·푸시(이때 에디터 포트 8080을
   외부에 열면 인증 없는 publish API도 열리니 포트 분리나 인증 필요).
