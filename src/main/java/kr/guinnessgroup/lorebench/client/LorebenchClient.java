@@ -90,10 +90,12 @@ public final class LorebenchClient {
                 mc.setScreen(new QuestScreen());
             }
         }
+        ReadyToasts.tick(mc);
     }
 
     private static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientQuests.clear();
         ClientDialogue.clear();
+        ReadyToasts.clear();
     }
 }
