@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
  *   "lines": { "offer": [ "밀 10개만 구해다 주겠나?" ], "accepted": [ "부탁하네." ], "declined": [ "그런가…" ] },
  *   "supplies": [ { "item": "minecraft:wheat_seeds", "count": 5 } ],
  *   "stages": [ {
- *     "id": "stage_a1b2c3d4", "text": "촌장에게 밀 가져가기", "to": "npc_7ha2m0qe",
+ *     "id": "stage_a1b2c3d4", "text": "밀 모으기", "readyText": "촌장에게 밀 가져가기", "to": "npc_7ha2m0qe",
  *     "goals": [ { "item": "minecraft:wheat",   "count": 10 }, { "kill": "minecraft:wolf", "count": 3 },
  *                { "harvest": "minecraft:potatoes", "count": 5 }, { "breed": "minecraft:cow", "count": 2 },
  *                { "collect": "minecraft:amethyst_shard[custom_name='\"목걸이 조각\"']", "count": 3,
@@ -48,7 +48,7 @@ import java.util.regex.Pattern;
  *                "handed": [ "내일 오게." ], "waiting": [ "아직 망치질 중일세." ], "ready": [ "다 됐네!" ] } } ],
  *   "rewards": [ { "item": "minecraft:emerald", "count": 5 } ] } ] }</pre>
  * {@code folders}, a folder's {@code parent}, a quest's {@code icon}, {@code text}, {@code folder},
- * {@code giver}, {@code requires}, {@code lines} and {@code supplies}, and a stage's {@code to}, {@code goals},
+ * {@code giver}, {@code requires}, {@code lines} and {@code supplies}, and a stage's {@code readyText}, {@code to}, {@code goals},
  * {@code wait}, {@code gives} and {@code lines} are optional (no parent or folder = the top, no {@code to} = the giver,
  * no goals = just talk, no wait = go on right away; see docs/decisions/0009-quest-workbench.md, 0013-waiting.md and
  * 0015-quest-stages.md for the rest). A quest has one stage or more; stage ids are unique in the document. A goal
@@ -209,6 +209,7 @@ public final class QuestFormat {
             if (text.isEmpty()) {
                 errors.add(where + ": missing 'text' (what to do, shown in the quest screen)");
             }
+            String readyText = optional(o, "readyText");
             String to = npc(o, "to", where, errors);
             List<QuestDoc.Goal> goals = o.has("goals") ? goals(o, where, errors) : List.of();
             for (QuestDoc.Goal g : goals) {
@@ -225,7 +226,7 @@ public final class QuestFormat {
                     .forEach(g -> brought.add(g.itemId()));
             gives.stream().filter(QuestDoc.Stack::quest).forEach(g -> brought.add(g.itemId()));
             if (errors.size() == before) {
-                out.add(new QuestDoc.Stage(id, text, to, goals, waitDays, gives, new QuestDoc.StageLines(
+                out.add(new QuestDoc.Stage(id, text, readyText, to, goals, waitDays, gives, new QuestDoc.StageLines(
                         lines.get(0), lines.get(1), lines.get(2), lines.get(3), lines.get(4))));
             }
         }
@@ -554,6 +555,9 @@ public final class QuestFormat {
         JsonObject o = new JsonObject();
         o.addProperty("id", s.id());
         o.addProperty("text", s.text());
+        if (!s.readyText().isEmpty()) {
+            o.addProperty("readyText", s.readyText());
+        }
         if (!s.to().isEmpty()) {
             o.addProperty("to", s.to());
         }

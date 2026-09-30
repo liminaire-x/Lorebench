@@ -53,7 +53,7 @@ class QuestFormatTest {
         QuestDoc.Quest q = doc.find("quest_k3f9x2ma");
         assertEquals(new QuestDoc.Quest("quest_k3f9x2ma", "밀 배달", "minecraft:wheat", "촌장에게 밀 10개를 가져다주자.\n빨리!",
                 List.of(new QuestDoc.Stack("minecraft:emerald", 5)), List.of(), "", QuestDoc.Flow.NONE,
-                List.of(new QuestDoc.Stage("stage_a1b2c3d4", "촌장에게 밀 가져가기", "",
+                List.of(new QuestDoc.Stage("stage_a1b2c3d4", "촌장에게 밀 가져가기", "", "",
                         List.of(QuestDoc.Goal.item("minecraft:wheat", 10)), 0, List.of(), QuestDoc.StageLines.NONE))), q);
         assertNull(doc.find("quest_other"));
         assertEquals(List.of(), doc.folders());
@@ -90,6 +90,21 @@ class QuestFormatTest {
         String written = QuestFormat.write(doc);
         assertEquals(2, written.split("\"goals\"", -1).length - 1, written); // a stage without goals writes none
         assertEquals(doc, QuestFormat.read(written));
+    }
+
+    @Test
+    void aStageMaySayWhatToDoOnceItsGoalsAreMet() {
+        QuestDoc doc = one("", "\"readyText\": \"촌장에게 가져가기\", \"goals\": [ { \"item\": \"minecraft:wheat\", \"count\": 10 } ]");
+        QuestDoc.Stage s = onlyStage(doc);
+        assertEquals("할 일", s.text());
+        assertEquals("촌장에게 가져가기", s.readyText());
+        assertEquals("촌장에게 가져가기", s.doneText());
+        assertEquals(doc, QuestFormat.read(QuestFormat.write(doc)));
+        // Left out: the text is all there is, and none is written.
+        QuestDoc plain = one("", "");
+        assertEquals("", onlyStage(plain).readyText());
+        assertEquals("할 일", onlyStage(plain).doneText());
+        assertFalse(QuestFormat.write(plain).contains("readyText"));
     }
 
     @Test

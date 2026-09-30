@@ -333,7 +333,7 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
   // One field of the chosen stage; an emptied optional one (to, goals, gives) is dropped.
   const setStageField = (key, value) => changeStage((st) => {
     const next = { ...st, [key]: value }
-    if ((key === 'to' && value === '') || ((key === 'goals' || key === 'gives') && !value.length)) delete next[key]
+    if (((key === 'to' || key === 'readyText') && value === '') || ((key === 'goals' || key === 'gives') && !value.length)) delete next[key]
     return next
   })
   // Game days between handing the stage in and going on (0013): { days: n }, none when empty.
@@ -487,7 +487,11 @@ export default function QuestTab({ quests, setQuests, folders, setFolders, npcs,
               </div>
               <label style={label}>
                 <div style={{ marginBottom: 3 }}>Text <span style={hint}>(what to do, a line in the quest screen)</span></div>
-                <input value={stage.text ?? ''} placeholder="e.g. 촌장에게 밀 가져가기" onChange={(e) => setStageField('text', e.target.value)} style={{ ...input, fontSize: 15 }} />
+                <input value={stage.text ?? ''} placeholder="e.g. 밀 모으기" onChange={(e) => setStageField('text', e.target.value)} style={{ ...input, fontSize: 15 }} />
+              </label>
+              <label style={label}>
+                <div style={{ marginBottom: 3 }}>When done <span style={hint}>(shown instead once the needs are met: where to go to finish it; empty = Text)</span></div>
+                <input value={stage.readyText ?? ''} placeholder={stage.text || 'e.g. 촌장에게 밀 가져가기'} onChange={(e) => setStageField('readyText', e.target.value)} style={input} />
               </label>
               <div style={{ ...hint, marginBottom: 12 }}>id: {stage.id} (fixed; players' records name the stage they are on by it)</div>
               <Section title="Stage">

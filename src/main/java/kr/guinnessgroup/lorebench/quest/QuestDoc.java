@@ -85,6 +85,8 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      *
      * @param id       stable; players' records name the stage they are on by it
      * @param text     what to do, a line in the quest screen
+     * @param readyText what the quest screen says instead once the goals are met (where to go to finish it),
+     *                 or "" for {@code text} (0015)
      * @param to       the NPC id it is done with, or "" for the giver
      * @param goals    all must be met, shown in this order; none = just talk to the NPC
      * @param waitDays game days between handing the goals in and going on, or 0 for none;
@@ -93,8 +95,14 @@ public record QuestDoc(List<Folder> folders, List<Quest> quests) {
      *                 ({@link Stack#quest}) is marked for the player like dropped ones (0012). Never sent to clients
      * @param lines    what the NPC says during this stage
      */
-    public record Stage(String id, String text, String to, List<Goal> goals, int waitDays, List<Stack> gives,
-                        StageLines lines) {}
+    public record Stage(String id, String text, String readyText, String to, List<Goal> goals, int waitDays,
+                        List<Stack> gives, StageLines lines) {
+
+        /** The line once the goals are met, and for a stage gone by (what finished it): its ready text, or its text. */
+        public String doneText() {
+            return readyText.isEmpty() ? text : readyText;
+        }
+    }
 
     /**
      * How a quest is offered. See docs/decisions/0009-quest-workbench.md.

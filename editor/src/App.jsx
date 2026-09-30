@@ -107,9 +107,15 @@ function tidyLines(thing) {
   return Object.keys(kept).length ? { ...rest, lines: kept } : rest
 }
 
+// A stage: its empty lines, and a "when done" text of only spaces, go.
+function tidyStage(st) {
+  const { readyText, ...rest } = tidyLines(st)
+  return readyText?.trim() ? { ...rest, readyText } : rest
+}
+
 function tidyQuest(q) {
   const tidy = tidyLines(q)
-  return q.stages ? { ...tidy, stages: q.stages.map(tidyLines) } : tidy
+  return q.stages ? { ...tidy, stages: q.stages.map(tidyStage) } : tidy
 }
 
 // --- node on the canvas ---

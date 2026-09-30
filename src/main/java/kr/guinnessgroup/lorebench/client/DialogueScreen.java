@@ -269,13 +269,20 @@ final class DialogueScreen extends Screen {
         PacketDistributor.sendToServer(new DialogueChoicePayload(action, shown.quest().id()));
     }
 
-    /** Under the card's title: the quest's story for an offer, else what the stage is (0015). */
+    /**
+     * Under the card's title: the quest's story for an offer, else what the stage is (0015): its ready text
+     * when it can be handed in, as the quest screen says then.
+     */
     private String cardText() {
         QuestDoc.Quest q = shown.quest();
         if (shown.kind() == Dialogue.Kind.OFFER) {
             return q.text();
         }
-        return q.current() == null ? "" : q.current().text();
+        QuestDoc.Stage stage = q.current();
+        if (stage == null) {
+            return "";
+        }
+        return shown.kind() == Dialogue.Kind.READY ? stage.doneText() : stage.text();
     }
 
     // --- layout ---

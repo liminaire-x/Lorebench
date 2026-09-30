@@ -43,7 +43,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // Handled on the client's main thread (the registrar's default).
-        event.registrar("7").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
+        event.registrar("8").playToClient(TYPE, CODEC, (payload, context) -> ClientQuests.accept(payload));
     }
 
     @Override
@@ -73,7 +73,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
 
     /**
      * What a player's screen shows of a quest: id, title, icon, story, rewards, supplies, and each
-     * stage given (the caller cuts them with {@link QuestDoc.Quest#upTo}) with what to do and its goals.
+     * stage given (the caller cuts them with {@link QuestDoc.Quest#upTo}) with what to do (and once its goals are met) and its goals.
      * Folders are for the editor only, and givers, NPCs, lines, waits and gifts stay on the server (dialogue
      * sends the lines it needs, the state says whether it is waiting, and a gift is seen when it is given),
      * so they aren't sent.
@@ -90,6 +90,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
         for (QuestDoc.Stage s : q.stages()) {
             buf.writeUtf(s.id());
             buf.writeUtf(s.text());
+            buf.writeUtf(s.readyText());
             buf.writeVarInt(s.goals().size());
             for (QuestDoc.Goal g : s.goals()) {
                 buf.writeEnum(g.kind());
@@ -110,7 +111,7 @@ public record QuestSyncPayload(List<Entry> quests) implements CustomPacketPayloa
         int n = buf.readVarInt();
         List<QuestDoc.Stage> stages = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            stages.add(new QuestDoc.Stage(buf.readUtf(), buf.readUtf(), "", readGoals(buf), 0, List.of(),
+            stages.add(new QuestDoc.Stage(buf.readUtf(), buf.readUtf(), buf.readUtf(), "", readGoals(buf), 0, List.of(),
                     QuestDoc.StageLines.NONE));
         }
         return new QuestDoc.Quest(id, title, icon, text, rewards, supplies, "", QuestDoc.Flow.NONE, List.copyOf(stages));

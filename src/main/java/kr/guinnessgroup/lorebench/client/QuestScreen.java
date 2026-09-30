@@ -138,12 +138,12 @@ public final class QuestScreen extends Screen {
         QuestDoc.Stage stage = q.current();
         boolean done = selected.state() == QuestState.DONE;
         boolean active = selected.state() == QuestState.ACTIVE && player != null && stage != null;
+        boolean met = active && Quests.goalsMet(player.getInventory(), selected.progress(), q, stage, card::condition);
         Component status = switch (selected.state()) {
             case DONE -> Component.translatable("lorebench.quests.done").withColor(GREEN);
             case WAITING -> Component.translatable("lorebench.quests.waiting").withColor(LIGHT); // no days left shown (0013)
             case READY -> Component.translatable("lorebench.quests.take").withColor(GREEN);
-            default -> active && Quests.goalsMet(player.getInventory(), selected.progress(), q, stage, card::condition)
-                    ? Component.translatable("lorebench.quests.ready").withColor(GREEN) : null;
+            default -> met ? Component.translatable("lorebench.quests.ready").withColor(GREEN) : null;
         };
         y = listTop();
         g.enableScissor(dx, y, dx + dw, bottom);
@@ -161,13 +161,15 @@ public final class QuestScreen extends Screen {
             }
         }
         // The stages so far, dimmed, then what to do now (0015). Those ahead never reach the client,
-        // and how many there are is not shown. Once it is done, every stage is dimmed.
+        // and how many there are is not shown. Once it is done, every stage is dimmed. A stage gone by, and
+        // the one now once its goals are met, reads its ready text; handed in to wait, the plain text.
         if (!q.stages().isEmpty()) {
             y += 4;
         }
         for (QuestDoc.Stage s : q.stages()) {
             boolean now = s == stage && !done;
-            for (FormattedCharSequence line : font.split(Component.literal(s.text()), dw)) {
+            String text = !now || met ? s.doneText() : s.text();
+            for (FormattedCharSequence line : font.split(Component.literal(text), dw)) {
                 g.drawString(font, line, dx, y, now ? WHITE : GRAY);
                 y += font.lineHeight;
             }
