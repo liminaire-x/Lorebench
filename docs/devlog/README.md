@@ -59,3 +59,4 @@ Lorebench는 **이야기(구체적인 장면)가 요구하는 것만** 만든다
 | [006](006-carrot-thief.md) | 여섯 번째 이야기: 당근 도둑 |
 | [007](007-necklace-for-the-daughter.md) | 일곱 번째 이야기: 딸에게 가는 목걸이 |
 | [008](008-guard-captains-worry.md) | 여덟 번째 이야기: 경비대장의 걱정 |
+| [009](009-all-the-pieces.md) | 아홉 번째 이야기: 조각이 다 모이면 |
